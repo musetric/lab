@@ -29,7 +29,8 @@ Transcribe vocals with WhisperX.
 
 ```bash
 musetric-transcribe \
-  --audio-path /path/to/vocals.wav \  # input vocal audio file
+  --audio-path /path/to/vocals.wav \  # input vocal audio file (the lead)
+  --backing-path /path/to/backing.wav \  # optional: backing vocals, added at half level
   --result-path /path/to/transcription.json \  # output JSON file
   --models-path /path/to/models \  # base directory for downloaded models
   --log-level info  # debug|info|warn|error (default: info)

@@ -1,7 +1,8 @@
 import numpy as np
 
+# A segment is dropped when its RMS is below this share of the median segment
+# RMS. There is no absolute floor: a quiet but sung stem would lose every line.
 SILENCE_RMS_RATIO = 0.2
-SILENCE_RMS_MIN = 0.005
 
 
 def filter_silent_segments(
@@ -24,7 +25,7 @@ def filter_silent_segments(
             continue
         rms_values.append(float(np.sqrt(np.mean(np.square(clip)))))
     median_rms = float(np.median(rms_values)) if rms_values else 0.0
-    threshold = max(SILENCE_RMS_MIN, median_rms * SILENCE_RMS_RATIO)
+    threshold = median_rms * SILENCE_RMS_RATIO
     filtered = [
         segment
         for segment, rms in zip(segments, rms_values, strict=False)

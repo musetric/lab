@@ -32,9 +32,10 @@ from musetric_toolkit.transcribe_audio.download_progress import (
 from musetric_toolkit.transcribe_audio.hallucination_filter import (
     _is_hallucination,
     filter_hallucinated_segments,
+    strip_credit_segments,
 )
 from musetric_toolkit.transcribe_audio.language_detector import (
-    detect_language_fulltrack,
+    detect_language_loudest,
 )
 from musetric_toolkit.transcribe_audio.silence_filter import (
     filter_silent_segments,
@@ -367,6 +368,23 @@ _LOOP_GUARD_LADDER = (
     {"no_repeat_ngram_size": 3},
     {"no_repeat_ngram_size": 3, "repetition_penalty": 1.15},
 )
+
+# --- Halves -----------------------------------------------------------------
+#
+# Whisper can stop early in a window, or jump from its start to its end and
+# leave the sung middle out. A long window whose aligned words stop early or
+# leave a long gap is decoded again as two halves, and the halves replace it
+# when they give more words. The browser runtime does the same with its own
+# word times (packages/ai/src/runtime/whisper/whisperRuntime.ts).
+_HALVES_MIN_SECONDS = 12.0  # only long windows are split
+_HALVES_COVERAGE = 0.6  # words ending before this share of the window -> split
+_HALVES_MAX_GAP_SECONDS = 6.0  # a gap this long between words -> split
+_HALVES_MIN_GAIN = 3  # the halves must add at least this many words
+
+# The lead with the backing at half level is what is transcribed, as in the
+# app's host (packages/server/src/analysis/transcribe.rs): the separation often
+# moves a sung line, a double or a duet into the backing.
+BACKING_WEIGHT = 0.5
 
 
 class Aligner(typing.NamedTuple):
@@ -751,7 +769,89 @@ def repair_looped_segments(model, audio, segments, language):
     return segments
 
 
-def transcribe_with_whisperx(audio_path: str, log_level: str = "info"):
+def _needs_halves(words, start: float, end: float) -> bool:
+    """True when a window's aligned words stop early or leave a long gap."""
+    duration = end - start
+    if duration < _HALVES_MIN_SECONDS:
+        return False
+    inside = sorted(
+        (word_start - start, word_end - start)
+        for word_start, word_end in words
+        if start - 1e-3 <= word_start < end - 1e-3
+    )
+    last_end = inside[-1][1] if inside else 0.0
+    widest_gap = max(
+        (later[0] - earlier[1] for earlier, later in itertools.pairwise(inside)),
+        default=0.0,
+    )
+    return (
+        last_end < _HALVES_COVERAGE * duration or widest_gap >= _HALVES_MAX_GAP_SECONDS
+    )
+
+
+def split_windows_in_halves(model, compaction, segments, aligned_segments, language):
+    """Decode again in halves every window that stopped early or skipped a stretch.
+
+    A half whose text loops or is a caption is dropped; the halves replace the
+    window only when they give at least ``_HALVES_MIN_GAIN`` more words. Returns
+    the segments and whether any window was replaced.
+    """
+    audio = compaction.audio
+    aligned_words = [
+        (float(w["start"]), float(w["end"]))
+        for seg in aligned_segments
+        for w in seg.get("words", [])
+        if w.get("start") is not None and w.get("end") is not None
+    ]
+    replaced = False
+    for window in compaction.chunks:
+        start, end = float(window["start"]), float(window["end"])
+        if not _needs_halves(aligned_words, start, end):
+            continue
+        inside = [
+            seg
+            for seg in segments
+            if start - 1e-3 <= float(seg.get("start", 0.0)) < end - 1e-3
+        ]
+        before = _word_count(" ".join(seg.get("text") or "" for seg in inside))
+        middle = start + (end - start) / 2.0
+        halves = []
+        for span_start, span_end in ((start, middle), (middle, end)):
+            clip = audio[int(span_start * SAMPLE_RATE) : int(span_end * SAMPLE_RATE)]
+            text = _decode_span(model, clip, language)
+            if text and not _is_looped(text) and not _is_hallucination(text):
+                halves.append({"start": span_start, "end": span_end, "text": text})
+        after = _word_count(" ".join(half["text"] for half in halves))
+        if after < before + _HALVES_MIN_GAIN:
+            continue
+        inside_ids = {id(seg) for seg in inside}
+        segments = [seg for seg in segments if id(seg) not in inside_ids] + halves
+        replaced = True
+        logging.info(
+            "Decoded the window at %.1fs in halves: %d -> %d words",
+            start,
+            before,
+            after,
+        )
+    segments.sort(key=lambda seg: float(seg.get("start", 0.0)))
+    return segments, replaced
+
+
+def load_voice(audio_path: str, backing_path: str | None):
+    """The lead, with the backing added at ``BACKING_WEIGHT`` when given."""
+    audio = whisperx.load_audio(audio_path)
+    if backing_path:
+        backing = whisperx.load_audio(backing_path)
+        length = min(len(audio), len(backing))
+        audio[:length] += BACKING_WEIGHT * backing[:length]
+    return audio
+
+
+def transcribe_with_whisperx(
+    audio_path: str,
+    backing_path: str | None = None,
+    log_level: str = "info",
+):
     patch_speechbrain_lazy_imports()
     configure_torch_serialization()
     maybe_upgrade_whisperx_checkpoint()
@@ -768,19 +868,13 @@ def transcribe_with_whisperx(audio_path: str, log_level: str = "info"):
             vad_method="pyannote",
             vad_options={
                 # Chunk boundaries come from the spectral chunker (see
-                # use_precomputed_chunks); pyannote VAD here only feeds
-                # full-track language detection, so these stay at sensitive
-                # defaults to admit breathy / low-energy sung phrases.
+                # use_precomputed_chunks) and the language from the loudest
+                # windows; WhisperX still runs this VAD, its output unused.
                 "vad_onset": 0.45,
                 "vad_offset": 0.35,
             },
         )
-    audio = whisperx.load_audio(audio_path)
-    detected_language = detect_language_fulltrack(
-        model,
-        audio,
-        sample_rate=16000,
-    )
+    audio = load_voice(audio_path, backing_path)
 
     # Pack the spectral voiced spans into full-budget chunks and concatenate them
     # into a silence-free buffer. Transcription and alignment both run on this
@@ -788,6 +882,9 @@ def transcribe_with_whisperx(audio_path: str, log_level: str = "info"):
     packed_chunks = compute_packed_chunks(audio, chunk_size=30)
     compacted_audio, chunks, mapping = build_compaction(audio, packed_chunks)
     compaction = Compaction(compacted_audio, chunks, packed_chunks, mapping)
+    detected_language = detect_language_loudest(
+        model, compacted_audio, chunks, SAMPLE_RATE
+    )
 
     progress_tracker = ProgressTracker()
     progress_tracker.report_fraction(0.0)
@@ -818,12 +915,9 @@ def transcribe_with_whisperx(audio_path: str, log_level: str = "info"):
         )
     aligner = Aligner(align_model, metadata, device)
 
-    # Pass 2: align the first decode to get word timestamps, flag windows where
-    # the prior collapsed a repeated line (vocal energy, no words), and rebuild
-    # those windows from runway-fed re-decodes.
-    with intercept_progress_lines(progress_tracker):
-        detect_aligned = whisperx.align(
-            [dict(seg) for seg in segments],
+    def align_for_detection(current):
+        return whisperx.align(
+            [dict(seg) for seg in current],
             aligner.model,
             aligner.metadata,
             compacted_audio,
@@ -831,12 +925,25 @@ def transcribe_with_whisperx(audio_path: str, log_level: str = "info"):
             return_char_alignments=False,
             print_progress=False,
         ).get("segments", [])
+
+    # Pass 2: align the first decode to get word timestamps, decode again in
+    # halves the windows that stopped early or skipped a stretch, flag windows
+    # where the prior collapsed a repeated line (vocal energy, no words), and
+    # rebuild those windows from runway-fed re-decodes.
+    with intercept_progress_lines(progress_tracker):
+        detect_aligned = align_for_detection(segments)
+        segments, replaced = split_windows_in_halves(
+            model, compaction, segments, detect_aligned, detected_language
+        )
+        if replaced:
+            detect_aligned = align_for_detection(segments)
         candidates = plan_collapse_repairs(
             model, compaction, segments, detect_aligned, detected_language
         )
         if candidates:
             segments = apply_collapse_repairs(candidates, segments, aligner)
 
+    segments = strip_credit_segments(segments)
     segments = filter_silent_segments(segments, compacted_audio)
     segments = filter_hallucinated_segments(segments)
 
