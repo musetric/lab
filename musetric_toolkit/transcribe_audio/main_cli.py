@@ -133,6 +133,10 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description="Transcribe vocals with WhisperX")
     parser.add_argument("--audio-path", required=True, help="Path to vocal audio file")
     parser.add_argument(
+        "--backing-path",
+        help="Path to the backing vocals, added to the audio at half level",
+    )
+    parser.add_argument(
         "--result-path",
         required=True,
         help="Path to write transcription JSON result",
