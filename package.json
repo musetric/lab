@@ -1,0 +1,17 @@
+{
+  "name": "@musetric/lab",
+  "private": true,
+  "devDependencies": {
+    "@musetric/checks": "0.1.0"
+  },
+  "checks": {
+    "english": {
+      "except": [
+        "musetric_toolkit/chords_audio/chordmini/**",
+        "musetric_toolkit/pitch_audio/rmvpe/**",
+        "musetric_toolkit/transcribe_audio/hallucination_filter.py",
+        "thirdPartyNotices.md"
+      ]
+    }
+  }
+}

@@ -427,8 +427,8 @@ def _looks_looped(text: str) -> bool:
     passes, yet the 12x "ha" is a decoder loop the rebuild injected. This catches
     such payloads two ways: a long run of one identical token, or one token that
     dominates a non-trivial payload -- both signatures of a decoder loop, neither
-    fired by a genuinely repeated *lyric* (a held "вечная вечная" stays short and
-    its token never dominates the line).
+    fired by a genuinely repeated *lyric* (a word sung twice stays short and its
+    token never dominates the line).
     """
     tokens = re.sub(r"[^\w\s]", " ", (text or "").lower()).split()
     if len(tokens) < _LOOP_MIN_TOKENS:

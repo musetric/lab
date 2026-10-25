@@ -4,6 +4,7 @@
 
 - This is a Python project managed with `uv`: Python comes from `requires-python` and uv from `required-version` in `pyproject.toml`.
 - Prefer existing `uv run` scripts and tools; use free-form commands only when no script exists.
+- The repository checks of `@musetric/checks` (English letters, notices, links) come from npm: `npm ci` installs them and `scripts/check.py` runs them; a file where another language is part of its meaning goes to `checks.english.except` of `package.json`.
 
 ## Commits & PR Titles
 
