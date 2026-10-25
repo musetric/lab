@@ -1,6 +1,6 @@
 # Converting a PyTorch Separator to ONNX
 
-The toolkit keeps the torch implementation as the reference path and CLI
+The lab keeps the torch implementation as the reference path and CLI
 default. The files in this directory are offline tooling for exporting the
 neural network core to ONNX and manually validating that core through Python
 `onnxruntime`.
@@ -461,7 +461,7 @@ uv run --group export python scripts/onnx/roformer/infer_separator.py \
 
 The script runs the exported ONNX core through Python `onnxruntime` with the
 same host-side torch STFT/iSTFT stages used by the reference model. It is a
-manual validation tool and is not wired into the default toolkit CLI.
+manual validation tool and is not wired into the default lab CLI.
 
 ## Notes
 

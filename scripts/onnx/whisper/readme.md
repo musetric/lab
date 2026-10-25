@@ -6,20 +6,20 @@ so the decoder emits word-level timestamps. Quantized to **q4** and published to
 Hugging Face for the `@musetric/ai` (`packages/ai`) WebGPU runtime.
 
 This is a different toolchain from `../roformer/` (which exports the separation
-core from the toolkit's own torch model). Here `convert.py`, `quantize.py` and
+core from the lab's own torch model). Here `convert.py`, `quantize.py` and
 `extra/whisper.py` are **vendored from [huggingface/transformers.js][tjsconv]**
 (Apache-2.0); only the whisper code path is exercised.
 
 ## Environment
 
-Pinned deps conflict with the toolkit's own `transformers`, so the export runs
+Pinned deps conflict with the lab's own `transformers`, so the export runs
 in an **isolated** uv environment (never `uv sync` these into the project):
 
 - `requirements.txt` — the pinned export stack (Python 3.11).
 
 ## Export
 
-Run from the toolkit root. `--output_attentions` selects the custom ONNX config
+Run from the lab root. `--output_attentions` selects the custom ONNX config
 that outputs cross-attentions; the task is left as `auto` (whisper resolves to
 `automatic-speech-recognition-with-past`, which the alignment-head config needs).
 
@@ -44,8 +44,8 @@ added_tokens.json  special_tokens_map.json  normalizer.json
 onnx/encoder_model_q4.onnx  onnx/decoder_model_merged_q4.onnx
 ```
 
-`stage_whisper.py` copies exactly those into `deps/whisper-large-v3-turbo-onnx/`
-(the local publish repo).
+`stage_whisper.py` copies exactly those into the clone of the model repository,
+`../models/whisper-large-v3-turbo-onnx/` of the workspace.
 
 ## Make the encoder run on mobile GPUs (required)
 
@@ -60,7 +60,7 @@ uv run python scripts/onnx/whisper/mobile_encoder.py   --input  tmp/whisper-expo
 It is idempotent: a second run over an already-prepared graph reports that each
 pass has nothing to do and writes the same bytes. `stage_whisper.py` runs the
 same check before it copies anything, so an encoder that skipped this step
-cannot reach the publish repo.
+cannot reach the clone of the model repository.
 
 ### The graph is too big to bind
 
@@ -134,8 +134,8 @@ against 23. On the Adreno 660 the same change takes a token from 324.9 to
 
 ```bash
 uv run python scripts/onnx/whisper/mobile_decoder.py \
-  --input  deps/whisper-large-v3-turbo-onnx/decoder_model_merged_fp16.onnx \
-  --output deps/whisper-large-v3-turbo-onnx/decoder_model_merged_fp16.onnx
+  --input  ../models/whisper-large-v3-turbo-onnx/decoder_model_merged_fp16.onnx \
+  --output ../models/whisper-large-v3-turbo-onnx/decoder_model_merged_fp16.onnx
 ```
 
 ## Narrow the cross-attention outputs
@@ -158,7 +158,7 @@ NVIDIA the step is unchanged and only the JavaScript that assembles the weights
 gets cheaper, by 185 ms and 55 ms per window.
 
 ```bash
-uv run python scripts/onnx/whisper/trim_cross_attentions.py   --input  deps/whisper-large-v3-turbo-onnx/decoder_model_merged_fp16.onnx   --output deps/whisper-large-v3-turbo-onnx/decoder_model_merged_fp16.onnx   --generation-config deps/whisper-large-v3-turbo-onnx/generation_config.json
+uv run python scripts/onnx/whisper/trim_cross_attentions.py   --input  ../models/whisper-large-v3-turbo-onnx/decoder_model_merged_fp16.onnx   --output ../models/whisper-large-v3-turbo-onnx/decoder_model_merged_fp16.onnx   --generation-config ../models/whisper-large-v3-turbo-onnx/generation_config.json
 ```
 
 The config is rewritten in place, so the pass runs once per repository: a second
@@ -180,7 +180,7 @@ only the packed output and the key/value cache reads one tensor per step: on a
 text and the word times unchanged. On CPU the packed tensor equals its pieces.
 
 ```bash
-uv run python scripts/onnx/whisper/pack_step_outputs.py   --input  deps/whisper-large-v3-turbo-onnx/decoder_model_merged_fp16.onnx   --output deps/whisper-large-v3-turbo-onnx/decoder_model_merged_fp16.onnx   --generation-config deps/whisper-large-v3-turbo-onnx/generation_config.json
+uv run python scripts/onnx/whisper/pack_step_outputs.py   --input  ../models/whisper-large-v3-turbo-onnx/decoder_model_merged_fp16.onnx   --output ../models/whisper-large-v3-turbo-onnx/decoder_model_merged_fp16.onnx   --generation-config ../models/whisper-large-v3-turbo-onnx/generation_config.json
 ```
 
 ## Split the decoder into a flat step and cross K/V
@@ -204,7 +204,7 @@ decoder only; the q4 decoder, whose projections are `MatMulNBits`, stays
 merged.
 
 ```bash
-uv run python scripts/onnx/whisper/flatten_decoder_step.py   --input  deps/whisper-large-v3-turbo-onnx/decoder_model_merged_fp16.onnx   --step   deps/whisper-large-v3-turbo-onnx/decoder_model_merged_fp16.onnx   --cross  deps/whisper-large-v3-turbo-onnx/cross_kv_fp16.onnx
+uv run python scripts/onnx/whisper/flatten_decoder_step.py   --input  ../models/whisper-large-v3-turbo-onnx/decoder_model_merged_fp16.onnx   --step   ../models/whisper-large-v3-turbo-onnx/decoder_model_merged_fp16.onnx   --cross  ../models/whisper-large-v3-turbo-onnx/cross_kv_fp16.onnx
 ```
 
 ## Keep the step's small products out of the float16 subnormal range
@@ -237,7 +237,7 @@ step matches the unscaled one to 0.03 at a scale of 29 with the same argmax
 on every step of a 30 s window.
 
 ```bash
-uv run python scripts/onnx/whisper/scale_residual_stream.py   --input  deps/whisper-large-v3-turbo-onnx/decoder_model_merged_fp16.onnx   --output deps/whisper-large-v3-turbo-onnx/decoder_model_merged_fp16.onnx
+uv run python scripts/onnx/whisper/scale_residual_stream.py   --input  ../models/whisper-large-v3-turbo-onnx/decoder_model_merged_fp16.onnx   --output ../models/whisper-large-v3-turbo-onnx/decoder_model_merged_fp16.onnx
 ```
 
 The published set is then the q4 encoder, the fp16 step decoder with
@@ -264,36 +264,12 @@ uv run python scripts/onnx/whisper/scale_residual_stream.py --input X --output Y
 
 ## Publish
 
-`publish_whisper.py` verifies the staged files, prints a sha256 manifest,
-creates the HF repo and uploads the folder including its `README.md` model card.
-Requires `hf auth login` with write access to the musetric org.
-
-```bash
-# preview: verify + sha256 manifest, upload nothing
-uv run python scripts/onnx/whisper/publish_whisper.py --dry-run
-# publish
-uv run python scripts/onnx/whisper/publish_whisper.py
-```
-
-The printed sha256 manifest feeds the `@musetric/ai` whisper model descriptor
-(`packages/ai/src/models/whisperModel.ts`), which downloads and checksum-verifies
-these files the same way the separation core is fetched. The repo is a **flat**
-layout (the q4 graphs sit next to the config, not under `onnx/`); the runtime
-loads them with `subfolder: ''`.
-
-`publish_whisper.py` uses the HF API, which records the commit author as your
-Hugging Face no-reply address. To make the author match the committer (your git
-email), publish over git instead:
-
-```bash
-cd deps/whisper-large-v3-turbo-onnx
-git init -b main && git lfs install --local && git lfs track "*.onnx"
-git add -A
-git -c user.name="Your Name" -c user.email="you@example.com" \
-  commit -m "Whisper large-v3-turbo word-timestamped ONNX (q4, flat)"
-git remote add origin https://huggingface.co/musetric/whisper-large-v3-turbo-onnx
-git push -f origin main   # auth via the token from `hf auth login`
-```
+The staged files are published from the clone through git, as the
+[practice of models](https://github.com/musetric/headquarters/blob/main/practices/models.md)
+describes; the server pins the size and sha256 of each file in
+`packages/server/src/analysis/models.rs`. The repo is a **flat** layout (the q4
+graphs sit next to the config, not under `onnx/`); the runtime loads them with
+`subfolder: ''`.
 
 [tjs]: https://github.com/huggingface/transformers.js
 [tjsconv]: https://github.com/huggingface/transformers.js/tree/main/scripts

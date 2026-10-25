@@ -1,8 +1,6 @@
 [project]
-name = "musetric-toolkit"
+name = "musetric-lab"
 version = "0.0.1"
-description = "Musetric Toolkit"
-authors = [{ name = "Musetric", email = "musetric@gmail.com" }]
 requires-python = "==3.13.11"
 dependencies = [
     "torch==2.8.0",
@@ -41,12 +39,13 @@ musetric-parity = "musetric_toolkit.parity_audio.main_cli:main_cli"
 # The uv of every machine and of CI: setup-uv in CI reads this pin too.
 required-version = "==0.13.5"
 # CUDA-only: resolve the torch stack from the CUDA 12.9 PyTorch index and lock
-# only for platforms with CUDA wheels (Linux x86_64, Windows). macOS / non-x86
-# have no CUDA builds and are intentionally unsupported. torchcodec is left on
-# PyPI: cu129 only ships torchcodec >=0.10, but whisperx pins it to <0.8.0.
+# only for platforms with CUDA wheels (Linux and Windows on x86_64); macOS and
+# non-x86 have no CUDA builds and are intentionally unsupported. torchcodec is
+# left on PyPI: cu129 only ships torchcodec >=0.10, but whisperx pins it to
+# <0.8.0.
 environments = [
     "sys_platform == 'linux' and platform_machine == 'x86_64'",
-    "sys_platform == 'win32'",
+    "sys_platform == 'win32' and platform_machine == 'AMD64'",
 ]
 # faster-whisper hard-depends on the CPU `onnxruntime` package. Override it away
 # with a never-matching marker so only onnxruntime-gpu is installed; both ship the
