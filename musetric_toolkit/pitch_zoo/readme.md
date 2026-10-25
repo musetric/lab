@@ -68,7 +68,7 @@ Not ground truth, and not to be added as such:
 - the CREPE and pYIN trajectories of Dagstuhl ChoirSet: produced by models
   under test;
 - Choral Singing Dataset: f0 extracted automatically (SAC);
-- Cantoría: pYIN and CREPE;
+- Cantoria: pYIN and CREPE;
 - Annotated-VocalSet: pYIN smoothed with a median filter;
 - MDB-stem-synth, M4Singer, MedleyDB: NonCommercial licenses;
 - MIR-1K: no open license stated.

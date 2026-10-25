@@ -14,6 +14,17 @@ this clone, editable, so the scripts of Musetric that call them, such as
 uv tool install --editable "."
 ```
 
+## Development
+
+`scripts/check.py` runs every check CI runs. Besides uv, it needs
+editorconfig-checker on `PATH` and the npm tools of `package.json`, installed
+with `npm ci` on the Node that `.node-version` pins:
+
+```bash
+npm ci
+uv run --only-group check python scripts/check.py
+```
+
 ## CLI Usage
 
 Separate audio into lead vocals, backing vocals, and instrumental parts.

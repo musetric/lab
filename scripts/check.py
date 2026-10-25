@@ -14,10 +14,16 @@ def run_commands(commands):
             sys.exit(1)
 
 
+CHECKS = "node node_modules/@musetric/checks/dist/cli.js"
+
+
 def check():
     commands = [
         "uv lock --check",
         "editorconfig-checker",
+        f"{CHECKS} english",
+        f"{CHECKS} notices",
+        f"{CHECKS} links",
         "uv run --only-group check ruff check . --no-cache",
         "uv run --only-group check isort . --check-only",
         "uv run --only-group check black . --check",

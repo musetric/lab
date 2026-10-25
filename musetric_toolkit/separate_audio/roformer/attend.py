@@ -89,7 +89,7 @@ class Attend(nn.Module):
         # MatMul (not einsum): MatMul is supported on every onnxruntime EP
         # (WebGPU / DirectML / CUDA / CoreML / TensorRT) and is the form their
         # attention fusions match; einsum coverage on DirectML/CoreML is spotty.
-        # sim = q @ kᵀ ; out = attn @ v  (math-identical to the einsum path).
+        # sim = q @ k^T ; out = attn @ v  (math-identical to the einsum path).
         scale = q.shape[-1] ** -0.5
 
         # q_block splits the QUERY axis, not the key axis, so no online softmax is

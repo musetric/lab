@@ -153,7 +153,7 @@ without the MatMul rewrites the Adreno 750 differs by 2.07 with 94 frames
 changed. The published revision `8ab85fc0` is built with the flag; without it
 the build reproduces the previous revision `08616241` byte for byte.
 
-The rewrite is exact against the exported graph (max |Δlogit| ~5e-6 on ORT
+The rewrite is exact against the exported graph (max |delta logit| ~5e-6 on ORT
 CPU and on WebGPU) but static: every Gather index and Reshape target is baked
 for the captured batch, so it runs at `[--windows, 108, 144]` and nothing else.
 The rewrite pins the graph input and output to that shape, which also lets
@@ -183,11 +183,11 @@ room to spare, and pads at most 15 windows.
 The batch-16 graph was checked on devices against the wasm EP of the same file,
 one input of 26 and 60 windows:
 
-- OnePlus 9RT (Adreno 660): max |Δlogit| 5.7e-6, no mismatched logit or argmax,
+- OnePlus 9RT (Adreno 660): max |delta logit| 5.7e-6, no mismatched logit or argmax,
   in both buffer cache modes; the exported graph deviates by 0.75 there;
-- desktop NVIDIA (D3D12): max |Δlogit| 6.7e-6;
+- desktop NVIDIA (D3D12): max |delta logit| 6.7e-6;
 - Galaxy S24 Ultra (Adreno 750): every graph deviated, the exported one as
-  much as the rewrite (max |Δlogit| 1.99, one argmax of 2808 frames). The cause
+  much as the rewrite (max |delta logit| 1.99, one argmax of 2808 frames). The cause
   is the provider's `MatMul` on that GPU (musetric/musetric#891), which the
   MatMul rewrites below avoid: the published graph is within 5.7e-6 of
   onnxruntime's CPU provider there, with no argmax changed (the parity run of
