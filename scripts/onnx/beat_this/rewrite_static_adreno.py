@@ -1,4 +1,4 @@
-﻿# ruff: noqa: T201
+# ruff: noqa: T201
 """Static rewrite of beat_this that avoids the Adreno 6xx broken WebGPU kernels.
 
 - Transpose families that select the broken shared-tile kernel

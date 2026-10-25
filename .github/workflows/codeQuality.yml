@@ -6,15 +6,27 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   check-code-quality:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
         with:
-          python-version: "3.13.11"
-      - run: pip install uv
-      # Lint only needs ruff/black/isort; skip the project and its heavy CUDA deps.
-      - run: uv sync --only-group check
-      - run: uv run --group check python scripts/check.py
+          persist-credentials: false
+      # uv at the version `required-version` in pyproject.toml pins; uv brings
+      # the Python `requires-python` pins.
+      - uses: astral-sh/setup-uv@v10.3.2
+      # The standalone binary a developer has on PATH, at the monorepo's version.
+      - name: Install editorconfig-checker
+        env:
+          EDITORCONFIG_CHECKER_VERSION: v4.0.1
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl -fsSL "https://github.com/editorconfig-checker/editorconfig-checker/releases/download/$EDITORCONFIG_CHECKER_VERSION/editorconfig-checker-linux-amd64.tar.gz" | tar -xz -C "$RUNNER_TEMP/bin" editorconfig-checker
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      # The check a developer runs; only the lint group is installed, not the
+      # project and its CUDA dependencies.
+      - run: uv run --only-group check python scripts/check.py

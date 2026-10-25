@@ -7,7 +7,7 @@ Standalone CLI tool extracted from [Musetric](https://github.com/musetric/musetr
 Requires an NVIDIA GPU (CUDA 12.9) on Linux x86_64 or Windows.
 
 ```bash
-uv tool install --python 3.13.11 --editable "."
+uv tool install --editable "."
 ```
 
 ## CLI Usage

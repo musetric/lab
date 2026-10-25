@@ -1,4 +1,4 @@
-﻿# ruff: noqa: T201
+# ruff: noqa: T201
 """Capture real runtime shapes of a dynamic ONNX graph's interesting tensors.
 
 Runs the model once in ORT CPU with selected intermediates exposed as outputs
