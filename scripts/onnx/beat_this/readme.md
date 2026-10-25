@@ -113,8 +113,7 @@ overlapping 1500-frame windows).
 | `capture_shapes.py` | pin every intermediate shape at a chosen frame count |
 | `rewrite_static_adreno.py` | replace broken Adreno Transpose/Conv/BatchNorm; ship at 1500 frames |
 | `split_attention_webgpu.py` | split each attention core into head groups that fit one WebGPU storage binding |
-| `stage_beat_this.py` | copy the file set into the publish folder |
-| `publish_beat_this.py` | upload the staged folder to `musetric/beat-this-onnx` on HF |
+| `stage_beat_this.py` | copy the file set into the clone of `musetric/beat-this-onnx` |
 
 All paths are explicit arguments; the scripts carry no implicit defaults.
 
@@ -138,10 +137,12 @@ uv run python scripts/onnx/beat_this/dump_reference_mel.py \
   --audio <audio-dir> --out <dump-dir> --models-path <checkpoint-cache-dir>
 
 uv run python scripts/onnx/beat_this/stage_beat_this.py \
-  --export <export-dir> --dest <publish-dir>
-
-uv run python scripts/onnx/beat_this/publish_beat_this.py --src <publish-dir> --dry-run
+  --export <export-dir> --dest ../models/beat-this-onnx
 ```
+
+The staged files are published from that clone through git, as the
+[practice of models](https://github.com/musetric/headquarters/blob/main/practices/models.md)
+describes.
 
 Validate on the material the model is fed in production — the **instrumental
 stem**.

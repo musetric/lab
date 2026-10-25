@@ -13,7 +13,7 @@ from another export.  The staged names are stable for publishing:
     uv run python scripts/onnx/chordmini/stage_chordnet.py \
       --chordnet-export <chordnet-export-dir> \
       --cqt-plan <plan.bin> --cqt-plan-manifest <plan.json> \
-      --dest <publish-dir>
+      --dest ../models/chordmini-onnx
 """
 
 # ruff: noqa: T201

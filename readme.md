@@ -4,7 +4,11 @@ The lab of [Musetric](https://github.com/musetric/musetric): the reference of ev
 
 ## Installation
 
-Requires an NVIDIA GPU (CUDA 12.9) on Linux x86_64 or Windows.
+Requires an NVIDIA GPU (CUDA 12.9) on Linux or Windows on x86_64.
+
+The lab is not published to a package index. Its commands are installed from
+this clone, editable, so the scripts of Musetric that call them, such as
+`measure:parity` and `measure:pitch`, run the code of the clone:
 
 ```bash
 uv tool install --editable "."

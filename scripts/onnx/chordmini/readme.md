@@ -50,10 +50,9 @@ copied into the HF artifact.
 | `validate_chordnet.py` | compare deterministic feature-window logits from the exported classifier against the same Torch ChordNet pipeline |
 | `generate_cqt_plan.py` | generate the binary CQT plan, its JSON provenance manifest, and the TypeScript payload the `@musetric/cqt` tests use |
 | `generate_cqt_reference.py` | generate the librosa peak-magnitude table the `@musetric/cqt` tests measure against |
-| `stage_chordnet.py` | stage the ChordNet/CQT bundle under its published names |
-| `publish_chordnet.py` | validate and upload the staged bundle |
+| `stage_chordnet.py` | stage the ChordNet/CQT bundle under its published names in the clone of `musetric/chordmini-onnx` |
 
-## Build, stage, and publish
+## Build and stage
 
 The ONNX export uses the main lab environment plus the `export` dependency
 group (`onnx`). The plan generator uses the pinned lab `librosa`/`numpy`/
@@ -78,16 +77,14 @@ uv run python scripts/onnx/chordmini/stage_chordnet.py \
   --chordnet-export <chordnet-export-dir> \
   --cqt-plan <cqt-plan.bin> \
   --cqt-plan-manifest <cqt-plan.manifest.json> \
-  --dest <publish-dir>
-
-uv run python scripts/onnx/chordmini/publish_chordnet.py \
-  --src <publish-dir> --dry-run
+  --dest ../models/chordmini-onnx
 ```
 
 `stage_chordnet.py` always renames the two explicit plan inputs to the stable
-published names `cqt-plan.bin` and `cqt-plan.manifest.json`. `publish_chordnet.py`
-targets `musetric/chordmini-onnx` by default; pass `--repo <owner/repo>` to select
-another model repo.
+published names `cqt-plan.bin` and `cqt-plan.manifest.json`. The staged files are
+published from that clone through git, as the
+[practice of models](https://github.com/musetric/headquarters/blob/main/practices/models.md)
+describes.
 
 `validate_chordnet.py` runs three fixed-seed random unnormalized feature windows
 through the checkpoint-backed Torch classifier and CPU ONNX Runtime. It checks

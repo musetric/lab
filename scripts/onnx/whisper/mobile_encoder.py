@@ -4,7 +4,7 @@ Two independent defects stand between the stock export and a phone, and neither
 is in the weights. This applies the three graph rewrites that clear them, in
 order, on a single load of the graph, then checks that the result actually is
 clear. `stage_whisper.py` runs the same check before it stages anything, so an
-encoder that skipped this step cannot reach the publish repo.
+encoder that skipped this step cannot reach the model repo.
 
 **The graph is too big to bind.** Each layer computes attention in one shot, so
 its score tensor is `(20, 1500, 1500)` fp32 = 171.7 MiB, while WebGPU only

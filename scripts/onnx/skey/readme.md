@@ -42,8 +42,7 @@ the key argmax and confidence against the torch runner.
 |---|---|
 | `export_skey.py` | build the `audio → probs` graph, write `skey.onnx` + `config.json` |
 | `validate_skey.py` | key-index agreement of the ONNX vs the torch run_skey pipeline |
-| `stage_skey.py` | copy the file set into the publish folder |
-| `publish_skey.py` | upload the staged folder to `musetric/skey-onnx` on HF |
+| `stage_skey.py` | copy the file set into the clone of `musetric/skey-onnx` |
 
 All paths are explicit arguments; the scripts carry no implicit defaults.
 
@@ -61,10 +60,12 @@ uv run --group export python scripts/onnx/skey/validate_skey.py \
   --models-path <checkpoint-cache-dir>
 
 uv run python scripts/onnx/skey/stage_skey.py \
-  --export <export-dir> --dest <publish-dir>
-
-uv run python scripts/onnx/skey/publish_skey.py --src <publish-dir> --dry-run
+  --export <export-dir> --dest ../models/skey-onnx
 ```
+
+The staged files are published from that clone through git, as the
+[practice of models](https://github.com/musetric/headquarters/blob/main/practices/models.md)
+describes.
 
 Validate on the material the model is fed in production — the **instrumental
 stem**.
