@@ -55,8 +55,8 @@ copied into the HF artifact.
 
 ## Build, stage, and publish
 
-The ONNX export uses the main toolkit environment plus the `export` dependency
-group (`onnx`). The plan generator uses the pinned toolkit `librosa`/`numpy`/
+The ONNX export uses the main lab environment plus the `export` dependency
+group (`onnx`). The plan generator uses the pinned lab `librosa`/`numpy`/
 `scipy` environment.
 
 ```sh

@@ -1,6 +1,6 @@
-# Musetric Toolkit
+# Musetric Lab
 
-Standalone CLI tool extracted from [Musetric](https://github.com/musetric/musetric) so its worker scripts can run directly from the terminal.
+The lab of [Musetric](https://github.com/musetric/musetric): the reference of every processing step in torch, the export of the models to ONNX, and their training.
 
 ## Installation
 
@@ -106,5 +106,5 @@ Every stage boundary of the step is a raw little-endian file
 
 ## License
 
-Musetric Toolkit is [MIT licensed](https://github.com/musetric/musetric/blob/main/license.md).
+The lab is [MIT licensed](https://github.com/musetric/musetric/blob/main/license.md).
 Third-party notices are listed in [thirdPartyNotices.md](thirdPartyNotices.md).

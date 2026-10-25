@@ -49,7 +49,7 @@ All paths are explicit arguments; the scripts carry no implicit defaults.
 
 ## Run
 
-The export reuses the main toolkit env (it imports the vendored S-KEY code) plus
+The export reuses the main lab env (it imports the vendored S-KEY code) plus
 the `export` dependency group (`onnx`):
 
 ```sh

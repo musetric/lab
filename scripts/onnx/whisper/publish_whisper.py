@@ -40,10 +40,10 @@ PUBLISH_FILES = [
     "decoder_model_merged_q4.onnx",
 ]
 
-# Repo layout: <root>/music/musetric-toolkit/scripts/onnx/whisper/publish_whisper.py
-# and <root>/deps/whisper-large-v3-turbo-onnx — so parents[5] is <root>.
+# Workspace layout: <workspace>/lab/scripts/onnx/whisper/publish_whisper.py
+# and <workspace>/models/whisper-large-v3-turbo-onnx — so parents[4] is <workspace>.
 DEFAULT_SRC = (
-    Path(__file__).resolve().parents[5] / "deps" / "whisper-large-v3-turbo-onnx"
+    Path(__file__).resolve().parents[4] / "models" / "whisper-large-v3-turbo-onnx"
 )
 DEFAULT_REPO = "musetric/whisper-large-v3-turbo-onnx"
 

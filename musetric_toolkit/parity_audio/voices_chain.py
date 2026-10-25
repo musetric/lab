@@ -73,7 +73,7 @@ def run_session(session: ort.InferenceSession, model_input: np.ndarray) -> np.nd
 
 
 def author_voices(models_path: Path, vocals_path: str) -> tuple[np.ndarray, np.ndarray]:
-    """Lead and backing by UVR-MDXNet inference as the toolkit runs it."""
+    """Lead and backing by UVR-MDXNet inference as the lab runs it."""
     separator = MDXNetSeparator(
         model_path=models_path / envs.karaoke_mdx_model_rel_path,
         model_data_path=models_path / envs.mdx_model_data_rel_path,

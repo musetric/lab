@@ -6,20 +6,20 @@ so the decoder emits word-level timestamps. Quantized to **q4** and published to
 Hugging Face for the `@musetric/ai` (`packages/ai`) WebGPU runtime.
 
 This is a different toolchain from `../roformer/` (which exports the separation
-core from the toolkit's own torch model). Here `convert.py`, `quantize.py` and
+core from the lab's own torch model). Here `convert.py`, `quantize.py` and
 `extra/whisper.py` are **vendored from [huggingface/transformers.js][tjsconv]**
 (Apache-2.0); only the whisper code path is exercised.
 
 ## Environment
 
-Pinned deps conflict with the toolkit's own `transformers`, so the export runs
+Pinned deps conflict with the lab's own `transformers`, so the export runs
 in an **isolated** uv environment (never `uv sync` these into the project):
 
 - `requirements.txt` — the pinned export stack (Python 3.11).
 
 ## Export
 
-Run from the toolkit root. `--output_attentions` selects the custom ONNX config
+Run from the lab root. `--output_attentions` selects the custom ONNX config
 that outputs cross-attentions; the task is left as `auto` (whisper resolves to
 `automatic-speech-recognition-with-past`, which the alignment-head config needs).
 

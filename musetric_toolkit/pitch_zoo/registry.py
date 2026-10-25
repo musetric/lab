@@ -67,7 +67,7 @@ ZOO_MODELS = {
     for model in (
         ZooModel(
             "rmvpe",
-            "musetric-toolkit",
+            "lab",
             "Apache-2.0 (RMVPE), MIT (RVC code and checkpoint)",
             "https://github.com/Dream-High/RMVPE",
             _create_rmvpe,

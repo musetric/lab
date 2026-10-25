@@ -1,6 +1,6 @@
 """Run an exported separator ONNX core with Python host stages.
 
-This is a manual validation entry point. The toolkit's regular CLI still uses
+This is a manual validation entry point. The lab's regular CLI still uses
 the torch model; this script is for checking that an exported ONNX core can run
 through onnxruntime before the artifact is consumed elsewhere.
 """

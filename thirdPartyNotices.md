@@ -2,7 +2,7 @@
 
 This project includes or adapts portions of the following third-party works.
 This notice focuses on vendored code, adapted implementations, model/data
-artifacts downloaded by the toolkit, and primary runtime solutions used by the
+artifacts downloaded by the lab, and primary runtime solutions used by the
 CLI workflows. Ordinary Python package dependencies keep their license metadata
 in their distributed packages.
 
