@@ -10,9 +10,7 @@ Only the shapes that reach that shader are affected: after leading extents of
 one are squeezed away, a rank-2 permutation that swaps both axes. In this graph
 that is one node - a rank-3 tensor with a leading one whose last two axes swap.
 The permutations attention uses, rank 4 and rank 3 with a real leading batch,
-take a different kernel and are exact. See
-`plan/ort-webgpu-transpose-adreno660.md` for the investigation and the one-line
-fix upstream.
+take a different kernel and are exact. See musetric/musetric#975.
 
 `Gather` against a precomputed index table returns the same permutation exactly
 on the same device, so this rewrites

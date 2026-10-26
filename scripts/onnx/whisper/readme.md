@@ -91,8 +91,8 @@ thread reads its own slot back correctly, but the other threads do not see them.
 Only the shapes that reach that shader are affected: after leading extents of
 one are squeezed away, a rank-2 permutation swapping both axes. In this graph
 that is one node out of 161 - plus both `Conv` nodes, because the provider
-transposes NCHW to NHWC inside them. The full investigation, including the
-one-line fix upstream, is in `plan/ort-webgpu-transpose-adreno660.md`.
+transposes NCHW to NHWC inside them. The defect and every graph it affects are
+kept in [musetric/musetric#975](https://github.com/musetric/musetric/issues/975).
 
 `conv_to_matmul.py` writes the convolution as `Pad -> Slice x3 -> Concat ->
 Reshape -> MatMul -> Add -> Reshape` with the weight on the left, so no
