@@ -21,8 +21,8 @@ and on that hardware a workgroup array whose size is not a multiple of 512 bytes
 loses the stores of one warp out of four across `workgroupBarrier`. The stores
 land - a thread reads its own slot back correctly - but the other threads do not
 see them. `conv_to_matmul` and `transpose_to_gather` route the encoder around
-every shape that reaches that shader. The full investigation, including the
-one-line fix upstream, is in `plan/ort-webgpu-transpose-adreno660.md`.
+every shape that reaches that shader. The defect is kept in
+musetric/musetric#975.
 
     uv run python scripts/onnx/whisper/mobile_encoder.py \
       --input  tmp/whisper-export/.../onnx/encoder_model_q4.onnx \
