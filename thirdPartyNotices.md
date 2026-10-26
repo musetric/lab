@@ -213,32 +213,35 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 - License: MIT.
 - License source: Hugging Face model card metadata.
 
-Upstream is inconsistent about the Whisper license and it is worth knowing: the
-https://github.com/openai/whisper repository states that "Whisper's code and
-model weights are released under the MIT License", while the
-https://huggingface.co/openai/whisper-large-v3-turbo model card declares `apache-2.0`.
-This notice follows the source the weights are downloaded from, which declares
-MIT. The ONNX re-export used by the `musetric` web runtime is fetched from the
-`apache-2.0` model card instead and is documented as Apache-2.0 there.
-
 ## OpenAI Whisper - openai/whisper-large-v3-turbo
 
 - Source: https://huggingface.co/openai/whisper-large-v3-turbo, revision `41f01f3fe87f28c78e2fbf8b568835947dd65ed9`.
 - Usage: the original weights in torch behind the transcription reference of `musetric-parity`, downloaded at runtime.
 - Local files: `musetric_toolkit/parity_audio/transcribe_chain.py`.
-- License: Apache-2.0.
-- License source: Hugging Face model card metadata.
+- License: MIT.
+- License source: the Hugging Face model card metadata at that revision, and the `LICENSE` of https://github.com/openai/whisper. The card declared `apache-2.0` only in its first days; revision `41f01f3f` of 2024-10-04 changed it to `mit`.
 
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use
-these files except in compliance with the License. You may obtain a copy of the
-License at
+MIT License
 
-    http://www.apache.org/licenses/LICENSE-2.0
+Copyright (c) 2022 OpenAI
 
-Unless required by applicable law or agreed to in writing, software distributed
-under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
-CONDITIONS OF ANY KIND, either express or implied. See the License for the
-specific language governing permissions and limitations under the License.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 ## Transformers.js
 
