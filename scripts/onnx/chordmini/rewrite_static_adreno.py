@@ -26,10 +26,8 @@ batchable and fails inside a Reshape on any other batch, and a symbolic dim
 keeps the shape arithmetic of the source graph from folding, which leaves it on
 the CPU and blocks WebGPU graph capture.
 
-The rewrite is faithful, but on-device WebGPU runs still carry a residual
-plan-dependent error on Adreno (see the musetric plan,
-gpu/adreno660-strict-2026-09-11.md); the musetric runtime therefore runs this
-model on wasm for affected devices.
+The rewrite is faithful. The Adreno defects it avoids, and those it does not,
+are listed with their workarounds in musetric/musetric#975.
 
 Usage:
     uv run python capture_shapes.py --model beat_this.onnx --frames 1500 \
