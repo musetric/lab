@@ -1,35 +1,15 @@
 """Audit exported ONNX graphs for row-dispatched kernels that overflow on WebGPU.
 
-Several onnxruntime WebGPU kernels run one workgroup per row and reduce that row
-in workgroup-shared memory: the normalizations, Softmax, LpNormalization, TopK,
-InstanceNormalization and the Reduce* family. The reduction needs
-workgroupBarrier() in uniform control flow, so these kernels carry no
-`if (global_idx >= size) { return; }` guard, unlike every elementwise, MatMul,
-Split, Concat or Gather kernel.
-
-A dispatch has at most maxComputeWorkgroupsPerDimension workgroups per axis. Past
-it the EP reshapes the dispatch into a ceil(sqrt(rows))^2 square, and the spare
-workgroups of that square write past the end of the output. Where the backend
-clamps an out-of-range index instead of dropping the write (Dawn on Metal), the
-last row of the output is overwritten:
-
-- in a size-bucketed buffer (the default storage cache) the stray writes land in
-  the bucket slack and nothing shows;
-- in an exact-size buffer (storageBufferCacheMode 'simple') they land on the last
-  row. RMSNormalization returns +inf there, which attention spreads as NaN over
-  the whole output; Softmax returns silently wrong values.
-
-Measured with one-node fp16 graphs: on Chrome/Metal, RMSNorm over [60, 1100, 384]
-= 66000 rows gives 4 inf in row 65999 and [60, 1092, 384] = 65520 rows is exact;
-Softmax over [1100, 8, 60, 60] = 528000 rows gives 4 wrong values. On Chrome/D3D12
-the same graphs are exact, because the stray writes are dropped there.
+Several onnxruntime WebGPU kernels run one workgroup per row with no bounds check:
+the normalizations, Softmax, LpNormalization, TopK, InstanceNormalization and the
+Reduce* family. Past maxComputeWorkgroupsPerDimension rows their spare workgroups
+write past the end of the output (musetric/musetric#885).
 
 The rule this enforces: no such node sees more than 65535 rows, the WebGPU default
 cap, and every such node has a static input shape so that can be checked. Shapes
 are inferred from the graph inputs first, so a static-input graph without
-value_info is checked too. The
-Reduce* count is the number of reductions, an upper bound: onnxruntime runs some
-reductions through a naive kernel that has the guard.
+value_info is checked too. The Reduce* count is the number of reductions, an upper
+bound: onnxruntime runs some reductions through a naive kernel that has the guard.
 
 Usage:
   uv run python scripts/onnx/roformer/dispatch_rows_audit.py model.onnx [more.onnx ...]

@@ -300,28 +300,12 @@ def remap_segments_to_original(segments, mapping):
 
 # --- Collapse repair -------------------------------------------------------
 #
-# Whisper's language-model prior dislikes emitting a line verbatim twice. On a
-# repeated lyric (a chorus, a chanted refrain) it can therefore *collapse*: it
-# decodes the first pass and then stops, dropping the repeats and leaving a
-# stretch of audible singing with no transcribed words. We detect those windows
-# and rebuild them.
-#
-# Detection runs on the aligned timeline: a window is a collapse suspect when it
-# is long and phonetically busy (many syllable onsets) yet word alignment covers
-# almost none of it -- vocal energy with no words. Caption hallucinations
-# (subtitle boilerplate the filter would delete, also leaving a hole) are flagged
-# the same way.
-#
-# Repair re-decodes a flagged window with a *runway*: a slice of the nearest
-# earlier stable audio is prepended so the decoder enters the problem region with
-# momentum and does not collapse on the first repeat. The window is rebuilt from
-# two such decodes -- one per half -- so each half gets a full runway and the
-# combined slice stays within the 30s decode budget. A short silence pad sits
-# between runway and payload (a hard concat makes Whisper bleed/EOT at the seam).
-# The runway text is trimmed off afterwards by localized word-level alignment;
-# the rebuilt halves replace the original only when they are real, diverse,
-# non-looped, non-hallucinated content with more words than the collapse -- so a
-# repair can never make a window worse than the plain decode.
+# A collapse is a repeated lyric Whisper decodes once and then drops, leaving
+# singing with no words. A long, phonetically busy window that aligned words
+# barely cover, or a caption hallucination, is decoded again in two halves, each
+# after a runway of earlier clean audio and a silence pad. The runway text is
+# trimmed off by alignment, and the halves replace the window only when they are
+# real, diverse, non-looped content with more words.
 
 _MIN_WINDOW_SECONDS = 12.0  # only long windows can hide a collapse
 _MIN_ONSET_RATE = 2.0  # syllable onsets/s below this is a held note, not singing
@@ -329,7 +313,6 @@ _MAX_COVERED_FRACTION = 0.30  # aligned-word coverage below this fraction -> sus
 _MIN_UNCOVERED_SECONDS = 8.0  # ... with at least this many voiced-but-wordless seconds
 _MIN_REPAIR_WORD_GAIN = 3  # a repair must add at least this many words
 _MIN_UNIQUE_RATIO = 0.35  # below this the rebuild is a loop / vowel chant, not lyrics
-# (true loops sit near 0.01-0.15; a repetitive but real chorus is ~0.45+)
 
 _WINDOW_CAP_SECONDS = 30.0  # hard clamp on any decode slice (the model's budget)
 _RUNWAY_SECONDS = 15.0  # stable lead-in taken from the nearest clean window
@@ -352,16 +335,10 @@ _ONSET_MIN_FRAMES = 5  # too few frames to judge an onset rate
 # --- Loop guard -------------------------------------------------------------
 #
 # A chunk whose text compresses far better than natural language is a decoder
-# loop ("nein, nein, nein, ..."), not a transcription. WhisperX's batched path
-# never runs faster-whisper's temperature fallback, so a loop is final unless we
-# re-decode it ourselves. Detection is whisper's own compression-ratio test;
-# the retries add the repetition constraints CTranslate2 accepts through
-# `generate`, which is what the browser runtime's guard does.
-#
-# The threshold is *not* whisper's own 2.4: that is calibrated on speech, and
-# sung lyrics repeat by design. Measured per chunk on the leads corpus, a
-# legitimate chorus reaches 2.9 while a real decoder loop sits at 4.3+. Firing
-# in between re-decodes real choruses and measurably loses words.
+# loop ("nein, nein, nein, ...") and is decoded again. Detection is whisper's own
+# compression-ratio test, at a threshold above whisper's 2.4; the retries add the
+# repetition constraints CTranslate2 accepts through `generate`, as the browser
+# runtime's guard does.
 _LOOP_COMPRESSION_RATIO = 3.5
 _LOOP_MIN_BYTES = 48  # shorter texts compress unpredictably
 _LOOP_GUARD_LADDER = (
@@ -371,19 +348,17 @@ _LOOP_GUARD_LADDER = (
 
 # --- Halves -----------------------------------------------------------------
 #
-# Whisper can stop early in a window, or jump from its start to its end and
-# leave the sung middle out. A long window whose aligned words stop early or
-# leave a long gap is decoded again as two halves, and the halves replace it
-# when they give more words. The browser runtime does the same with its own
-# word times (packages/ai/src/runtime/whisper/whisperRuntime.ts).
+# A long window whose aligned words stop early or leave a long gap is decoded
+# again as two halves, and the halves replace it when they give more words. The
+# browser runtime does the same with its own word times
+# (packages/ai/src/runtime/whisper/whisperRuntime.ts).
 _HALVES_MIN_SECONDS = 12.0  # only long windows are split
 _HALVES_COVERAGE = 0.6  # words ending before this share of the window -> split
 _HALVES_MAX_GAP_SECONDS = 6.0  # a gap this long between words -> split
 _HALVES_MIN_GAIN = 3  # the halves must add at least this many words
 
 # The lead with the backing at half level is what is transcribed, as in the
-# app's host (packages/server/src/analysis/transcribe.rs): the separation often
-# moves a sung line, a double or a duet into the backing.
+# app's host (packages/server/src/analysis/transcribe.rs).
 BACKING_WEIGHT = 0.5
 
 
@@ -409,12 +384,7 @@ def _word_count(text: str) -> int:
 
 
 def _unique_ratio(text: str) -> float:
-    """Lexical diversity of the normalised text (lower-cased, punctuation gone).
-
-    A recovered chorus is lexically diverse (~0.6+); a sustained-vowel chant or a
-    one-phrase loop ("oh oh oh", "nein nein nein") collapses to a tiny ratio, so
-    this cleanly rejects the rebuild's pathologies.
-    """
+    """Lexical diversity of the normalised text (lower-cased, punctuation gone)."""
     words = re.sub(r"[^\w\s]", " ", (text or "").lower()).split()
     return len(set(words)) / len(words) if words else 1.0
 

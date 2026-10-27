@@ -1,11 +1,10 @@
 """Build the FULL separation ONNX graph: raw stereo audio -> vocals, with STFT,
-the NN core, mask-apply and iSTFT all inside one graph so onnxruntime-node runs
-it end-to-end on the WebGPU EP (1 CPU crossing/chunk, no second device).
+the NN core, mask-apply and iSTFT all inside one graph; --core-only builds the
+NN core alone.
 
-STFT/iSTFT are implemented as Conv1d / ConvTranspose1d with precomputed
-window x DFT-basis weights (NOT torch.stft/istft, which export to the WebGPU-
-unsupported STFT/DFT ops). Mask-apply uses real-arithmetic scatter_add (complex
-ops don't export to ONNX). The NN core (`net_forward`) is reused unchanged.
+STFT/iSTFT are Conv1d / ConvTranspose1d with precomputed window x DFT-basis
+weights, not torch.stft/istft. Mask-apply uses real-arithmetic scatter_add.
+The NN core (`net_forward`) is reused unchanged.
 """
 
 # ruff: noqa: T201
@@ -38,51 +37,26 @@ from musetric_toolkit.separate_audio.roformer_utils import dict_to_namespace
 N_FFT = 2048
 HOP = 441
 WIN = 2048
-# Attention head config (from config_vocals_mel_band_roformer_big_v1_ft.yaml:
-# heads=8, dim_head=64 -> dim_inner=512), used by the MHA fusion.
+# Attention head layout of the model: heads=8, dim_head=64 -> dim_inner=512.
 HEADS = 8
 HEAD_DIM = 64
 HIDDEN = HEADS * HEAD_DIM  # 512
 T = 1100  # default frame count, the published window; override with --frames
-TSAMP = HOP * (T - 1)  # 220500
+TSAMP = HOP * (T - 1)  # 484659
 PAD = N_FFT // 2  # 1024
 FREQS = N_FFT // 2 + 1  # 1025
 PACKED = FREQS * 2  # 2050
-# RMSNorm epsilon. The model's RMSNorm is F.normalize(x, dim=-1) =
-# x/max(||x||_2, 1e-12), so the ONNX form x/sqrt(mean(x^2)+eps) wants the smallest
-# epsilon it can carry: at 1e-6 every row whose per-element rms is below ~0.03 is
-# corrupted and those rows exist (band-split / early features), which measured
-# ~10 dB end-to-end.
+# RMSNorm epsilon: the model's RMSNorm is F.normalize(x, dim=-1) =
+# x/max(||x||_2, 1e-12), so the ONNX form x/sqrt(mean(x^2)+eps) takes the smallest
+# epsilon it can carry.
 RMSNORM_EPS = 1e-12
-# ... but 1e-12 is only usable while the node computes in fp32. A WebGPU kernel
-# normalizes by the reciprocal 1/sqrt(mean(x^2)+eps) and casts it to the tensor
-# dtype, so with fp16 tensors any row whose mean(x^2)+eps falls below
-# 1/65504^2 = 2.33e-10 turns that reciprocal into +inf, then 0*inf = NaN for the
-# whole row, and the attention softmax spreads the NaN over the entire time axis.
-# The bound does not depend on the data: 1/sqrt(eps) alone has to stay inside
-# fp16. Measured with a one-node fp16 graph on a WebGPU adapter: whole-row NaN at
-# eps <= 2.0e-10, clean from 2.4e-10 up. 1e-9 leaves the reciprocal a 2x margin
-# and costs nothing measurable - core parity against torch fp32 on a real chunk is
-# 45.68 dB at 1e-9 against 45.70 dB at 1e-12, while 1e-8 drops to 43.88 dB and
-# 1e-7 to 38.86 dB, past the 40 dB gate. Anything near the 1e-4 a device-side
-# patch first used is far outside it.
+# A normalization in fp16 casts 1/sqrt(mean(x^2)+eps) to fp16, so its epsilon
+# must stay above FP16_RSQRT_FLOOR.
 RMSNORM_EPS_FP16 = 1e-9
 FP16_RSQRT_FLOOR = 1.0 / 65504.0**2  # 2.33e-10
-# Several onnxruntime WebGPU kernels dispatch one workgroup per row and have no
-# bounds check, because their shared-memory reduction needs workgroupBarrier() in
-# uniform control flow: the normalizations, Softmax, LpNormalization, TopK,
-# InstanceNormalization and the Reduce* family. Past
-# maxComputeWorkgroupsPerDimension rows the EP turns the dispatch into a
-# ceil(sqrt(rows))^2 square, and the spare workgroups write past the end of the
-# output. Dawn on Metal clamps that index to the last element, so on a buffer of
-# exact size the last row comes back wrong: +inf out of RMSNormalization, then NaN
-# over the whole output after attention. A size-bucketed buffer cache hides it in
-# the slack, storageBufferCacheMode 'simple' does not; D3D12 drops the stray
-# writes. 65535 is the WebGPU default for the cap and what Dawn/Metal reports, so
-# no such kernel may see more rows than that. Measured on Chrome/Metal with
-# one-node fp16 graphs: RMSNormalization over [60, 1100, 384] (66000 rows) returns
-# 4 inf in row 65999, [60, 1092, 384] (65520) is exact; Softmax over
-# [1100, 8, 60, 60] returns 4 wrong values in its last row.
+# No onnxruntime WebGPU row kernel (the normalizations, Softmax, LpNormalization,
+# TopK, InstanceNormalization, Reduce*) may see more rows than this
+# (musetric/musetric#885).
 WEBGPU_DISPATCH_ROWS = 65535
 LEADING_AXES_OPS = frozenset(
     {"LayerNormalization", "RMSNormalization", "SimplifiedLayerNormalization"}
@@ -200,14 +174,6 @@ class FullSeparator(nn.Module):
         im = ii.permute(0, 2, 1, 3).reshape(2, FREQS, T)
         stacked = torch.cat([re, im], dim=1)  # [2, 2050, T]
         # iSTFT as ConvTranspose1d (iDFT + synthesis-window + overlap-add fused).
-        # NOTE: this op lands on the CPU EP (the opset-23 bump drops it there) at
-        # ~88 ms/chunk — and that is the better placement. Tried replacing it with a
-        # MatMul iDFT (~25 ms on WebGPU, 8x faster than the WebGPU ConvTranspose's
-        # 200 ms) + a manual pad/reshape/shifted-add overlap-add: end-to-end it was a
-        # WASH (the fold's memory movement ~= the CPU iSTFT it removes, on this
-        # movement-bound graph) AND cost ~5 dB (fp16 matmul). The CPU ConvTranspose
-        # does iDFT+OLA in one efficient MKL call; the overlap-add — not the DFT —
-        # is the real cost. Don't re-try without a cheaper-than-movement OLA.
         y = F.conv_transpose1d(stacked, self.istft_w, stride=HOP)  # [2,1,..]
         y = y[:, 0, PAD : PAD + TSAMP] / self.env  # [2, TSAMP]
         return y.reshape(1, 2, TSAMP)
@@ -221,12 +187,8 @@ class FullSeparator(nn.Module):
 def set_attention_block(model: MelBandRoformer, q_block: int) -> int:
     """Split the query axis of every attention layer into q_block-row chunks.
 
-    Exact, not an approximation — see Attend.forward. The point is the peak score
-    tensor: this model's six time-attention layers otherwise allocate
-    [60, 8, T, T] fp16, which is 230 MiB at T=501 and 1108 MiB at T=1100, past
-    what a mobile WebGPU storage buffer will bind. The six band-attention layers
-    are [T, 8, 60, 60] and were never the problem, so blocking skips them (their
-    sequence is 60, below any sensible block).
+    Exact, not an approximation — see Attend.forward. Only the six time-attention
+    layers are blocked; the band attentions, over a sequence of 60, stay whole.
     """
     count = 0
     for m in model.modules():
@@ -240,14 +202,8 @@ class RowChunkedFeedForward(nn.Module):
     """Run a feed-forward block over row chunks instead of the whole activation.
 
     Exact, and exact in fp16 too: rows of a matmul are independent, so every
-    output row is produced by the same arithmetic as before. Splitting the
-    reduction axis instead reorders the sums and costs roughly 66 dB a layer.
-
-    The point is dispatch length. One feed-forward is a [rows, 384] x [384, 1536]
-    matmul, which a mobile GPU runs as a single uninterruptible half-second of
-    work; a queue-level flush threshold cannot reach inside it. Chunking also
-    keeps the wide [rows, 1536] intermediate from being materialized at full
-    height, so peak memory falls instead of rising.
+    output row is produced by the same arithmetic as before. Chunking also keeps
+    the wide [rows, 1536] intermediate from being materialized at full height.
     """
 
     def __init__(self, net: nn.Sequential, parts: int, dim: int = 0) -> None:
@@ -265,9 +221,7 @@ class RowChunkedLinear(nn.Module):
     """Run a linear projection over row chunks instead of the whole activation.
 
     Exact for the same reason as RowChunkedFeedForward: every output row comes
-    from the same arithmetic. The q/k/v and output projections of a layer see
-    all T x 60 rows at once, which on Adreno 660 is one dispatch of about 200 ms
-    each, the longest of a run once the feed-forwards are chunked.
+    from the same arithmetic.
     """
 
     def __init__(self, linear: nn.Module, parts: int) -> None:
@@ -305,8 +259,6 @@ def split_heavy_projections(
     anyway, so nothing downstream wants the fused tensor back.
 
     Both rewrites are exact and neither adds a Concat over a wide activation.
-    Doing the same on the exported graph with Split/Concat instead does, and
-    pays several hundred MB of peak memory for it.
     """
     feeds = 0
     for module in list(model.modules()):
@@ -345,19 +297,13 @@ def set_stream_slabs(model: MelBandRoformer, slabs: int) -> None:
     Exact, fp16 included: nothing in a transformer layer reduces over its batch
     axis, so every slab gets the arithmetic it got as part of the whole.
 
-    The point is onnxruntime's allocation planner. It hands a freed buffer only to
-    a later tensor of the same static shape and keeps it for that shape until the
-    run ends, so every distinct large shape holds its own pool for the whole run.
-    The published layout gives the time and band transformers different shapes of
-    the same size, [60, T, 384] and [T, 60, 384] plus their transposed copies, and
-    those pools sit idle in turn. Here the time transformer takes the bands in
-    `slabs` slabs and the band transformer the frames, each slab cut straight
-    from the [b, t, f, d] stream and held as [1, rows, d]; with `slabs` dividing
-    both 60 and T a band slab and a frame slab have the same rows, so the norms,
-    projections, feed-forwards and residual adds of both transformers produce the
-    same shapes and share their buffers. Only the [b, h, n, d] view inside
-    attention differs. A 3-D stream keeps every Linear a MatMul and an Add as in
-    the published graph, where a 2-D one would export as Gemm and change the bits.
+    The time transformer takes the bands in `slabs` slabs and the band
+    transformer the frames, each slab cut straight from the [b, t, f, d] stream
+    and held as [1, rows, d]; with `slabs` dividing both 60 and T a band slab and
+    a frame slab have the same rows, so the norms, projections, feed-forwards and
+    residual adds of both transformers produce the same shapes and share their
+    buffers. Only the [b, h, n, d] view inside attention differs. The stream stays
+    3-D, so every Linear stays a MatMul and an Add.
 
     Needs --split-rows: the slabs use the unfused q, k and v projections, and the
     feed-forward row groups are cut along the rows axis.
@@ -675,8 +621,7 @@ class Core(nn.Module):
     net_forward emits per-band masks [1,1,3958,T,2]; this tail gathers them onto
     the 2050 packed freq bins (fan-in <=2 per bin) and divides by the per-bin band
     count, so the published core needs no host-side band tables. It is a Gather +
-    Add + Div formulation (all WebGPU-resident) rather than scatter_add, whose
-    ScatterElements has no onnxruntime-web WebGPU kernel and would fall back to CPU.
+    Add + Div formulation, not scatter_add.
     """
 
     def __init__(self, model: MelBandRoformer):
@@ -789,16 +734,9 @@ def export(  # noqa: C901, PLR0912, PLR0913, PLR0915
         print("keeping FP32 (no fp16 conversion) ...")
         save_fp16(proto, output)
     else:
-        # Keep the DSP (STFT/iSTFT framing) and the RMSNorm chain (ReduceL2/Clip/
-        # Div) + Softmax in fp32; everything else (the NN core MatMul/Gemm) -> fp16.
-        # NOTE: a naive fp16 conversion of the RMSNorm chain produces all-NaN
-        # output (ReduceL2 = sqrt(sum x^2) overflows fp16 for the large residual
-        # stream, and fp16 Clip/Div do not recover it) — measured, parity gate
-        # NaN=441000. Those boundary Casts can only be removed by FUSING RMSNorm to
-        # SkipSimplifiedLayerNormalization (fp32-internal accumulation), not here.
-        # RMSNormalization (the fused replacement) also stays fp32: its eps=1e-12
-        # underflows in fp16 (small/zero rows -> 0/0 NaN), and fp32 IO is ~free on
-        # this memory-bound graph (per-chunk unchanged). See fuse_rmsnorm's note.
+        # Keep the DSP (STFT/iSTFT framing) and, unless --all-fp16, the RMSNorm
+        # chain (ReduceL2/Clip/Div or RMSNormalization) + Softmax in fp32;
+        # everything else (the NN core MatMul/Gemm) -> fp16.
         extra_block = (
             ["Conv", "ConvTranspose", "Pad"]
             if all_fp16
@@ -892,12 +830,8 @@ def _rewrite_nodes(graph, remove: set, replace_at: dict) -> None:
 def fold_rotary_tables(graph) -> int:
     """Replace every Cos/Sin of a constant Slice with its value, computed in fp32.
 
-    The rotary embedding exports its angle cache, position times frequency, as an
-    initializer that the graph slices and feeds to Cos and Sin. The fp16 conversion
-    would store those angles in fp16, whose step is 0.5 rad at the far end of an
-    1100-frame window, and every rotation there would come out wrong. The cosines
-    and sines themselves sit in [-1, 1], where fp16 keeps them to 5e-4, so folding
-    them first loses nothing.
+    The angles of the rotary embedding never reach fp16; only the cosines and
+    sines do.
     """
     from onnx import numpy_helper  # noqa: PLC0415
 
@@ -947,31 +881,16 @@ def _ensure_ms_opset(model) -> None:
 
 
 def fuse_rmsnorm(graph, epsilon: float) -> int:
-    """RMSNorm chain -> standard ONNX RMSNormalization (opset 23, WebGPU kernel,
-        fp32-internal accumulation so the fp16 ReduceL2-overflow problem is gone).
-        Pattern (fp32): x -> ReduceL2(x) -> Clip(min=eps) -> Expand -> Div(x, .) ->
-        Mul(sqrt_dim const) -> Mul(gamma). RMSNormalization(X, scale) = X /
-        sqrt(mean(X^2)+eps) * scale, so scale = gamma and the sqrt_dim factor folds
-        away (mean vs sum). Caller bumps the onnx opset import to 23.
+    """RMSNorm chain -> standard ONNX RMSNormalization (opset 23, fp32-internal
+        accumulation). Pattern (fp32): x -> ReduceL2(x) -> Clip(min=eps) -> Expand ->
+        Div(x, .) -> Mul(sqrt_dim const) -> Mul(gamma). RMSNormalization(X, scale) =
+        X / sqrt(mean(X^2)+eps) * scale, so scale = gamma and the sqrt_dim factor
+        folds away (mean vs sum). Caller bumps the onnx opset import to 23.
 
     epsilon is RMSNORM_EPS (1e-12) while the node stays fp32 and RMSNORM_EPS_FP16
-        (1e-8) once it runs in fp16 — see the constants for why each value, and pass
-        the one that matches how this graph will be converted. Both are far below the
-        1e-6 that corrupts every row with per-element rms <~ 0.03 (~10 dB end-to-end:
-        isolated RMSNorm 24 dB vs 139 dB; full graph fp32 48 -> 57 dB).
-
-        The default export keeps the node fp32 (it is in export()'s op_block_list),
-        which costs nothing on this memory-bound graph — RMSNormalization accumulates
-        the reduction in fp32 internally regardless, and per-chunk time is unchanged
-        (682 vs 686 ms). --all-fp16 drops that pin to keep the [T,60,1536] activations
-        out of fp32, and then the epsilon is what has to change.
-
-        NOTE: the opset-23 bump pushes ConvTranspose (iSTFT) + Cos/Sin to the CPU on
-        the WebGPU EP — accepted on purpose: WebGPU ConvTranspose for the 2048-kernel
-        iSTFT measured 200 ms vs CPU 88 ms (2.3x slower on GPU). Fusing instead to
-        opset-1 LpNormalization (to keep the iSTFT on WebGPU) was tried and is net
-        SLOWER. com.microsoft SkipSimplifiedLayerNormalization needs a full-shape skip;
-        SimplifiedLayerNormalization is not a registered op. RMSNormalization stays.
+        (1e-9) once it runs in fp16; pass the one that matches how this graph will
+        be converted. The default export keeps the node fp32 (it is in export()'s
+        op_block_list); --all-fp16 drops that pin.
     """
     import onnx  # noqa: PLC0415
 
@@ -1051,9 +970,8 @@ def sanitize_fp16_initializers(model) -> int:
 
 
 def assert_fp16_epsilon_safe(model) -> None:
-    """Fail the build if a normalization that ended up in fp16 kept an epsilon the
-    dtype cannot carry through 1/sqrt(mean(x^2)+eps) — the NaN described at
-    RMSNORM_EPS_FP16.
+    """Fail the build if a normalization that ended up in fp16 kept an epsilon
+    below FP16_RSQRT_FLOOR.
     """
     import onnx  # noqa: PLC0415
 
@@ -1083,8 +1001,7 @@ def assert_fp16_epsilon_safe(model) -> None:
 
 def assert_dispatch_rows_safe(model) -> None:
     """Fail the build if a row-dispatched kernel would see more rows than
-    WEBGPU_DISPATCH_ROWS, or if its input shape is not known statically — the
-    overflow described at WEBGPU_DISPATCH_ROWS.
+    WEBGPU_DISPATCH_ROWS, or if its input shape is not known statically.
     """
     graph = model.graph
     shapes = {}
@@ -1153,20 +1070,10 @@ def dispatch_rows(node, dims: list[int], constants: dict) -> int | None:
 def keep_band_split_fp32(model, epsilon: float) -> int:
     """Keep the band gather and the band-split RMSNorms in fp32.
 
-    The fp16 conversion casts the spectrum to fp16 before the band gather. Adreno
-    GPUs read every fp16 subnormal, below 6.1e-5, as zero, and 12-18 % of the
-    values of a music STFT lie there. Each band-split RMSNorm then scales its band
-    to unit rms, so the zeroed bins of a quiet band become errors as large as its
-    features, and the masks drift the further the quieter the input: 20-25 dB
-    against onnxruntime's CPU provider on the Adreno 660 and 750, 41 dB on the
-    desktop (musetric/musetric#971). Removing that Cast keeps the gather, its
-    reshapes and the norms in fp32, and each norm's unit-scale output is cast to
-    fp16 before the band Linear.
-
-    The norms also take the fp32 epsilon. At the fp16 one, a row whose rms is
-    below sqrt(1e-9) = 3.2e-5 is damped against the model's F.normalize, which
-    alone kept the masks 30.8 dB from torch on the CPU provider; at 1e-12 they are
-    59.6 dB from it.
+    The fp16 conversion casts the spectrum to fp16 before the band gather
+    (musetric/musetric#971). Removing that Cast keeps the gather, its reshapes and
+    the norms in fp32, and each norm's unit-scale output is cast to fp16 before the
+    band Linear. The norms also take the fp32 epsilon.
 
     Returns the number of norms moved to fp32.
     """
@@ -1206,18 +1113,12 @@ def keep_band_split_fp32(model, epsilon: float) -> int:
 def keep_time_attention_fp32(model, frames: int) -> int:
     """Run the softmax and the probabilities x values of every time attention in fp32.
 
-    A time attention normalizes its scores over the `frames` keys of the window, so
-    most of its probabilities are far below 1 / frames. In fp16 every probability
-    below 6.1e-5 is subnormal, and the Adreno 660 and 750 read it as zero and drop
-    every product below 2^-14 inside the matmul with the values. The time attentions
-    lose that tail in every layer, and the masks end up 3.3 dB further from
-    onnxruntime's CPU provider than on the desktop (musetric/musetric#988).
-
-    The scores are cast to fp32 for the softmax, the values to fp32 for the matmul
-    with the probabilities, and its output back to fp16. The attention's scale, a
-    power of two, moves from the scores onto the queries first, which is exact and
-    leaves no fp16 copy of the scaled scores. The band attentions normalize over 60
-    bands and keep fp16.
+    The time attentions normalize over the `frames` keys of the window
+    (musetric/musetric#988). The scores are cast to fp32 for the softmax, the
+    values to fp32 for the matmul with the probabilities, and its output back to
+    fp16. The attention's scale, a power of two, moves from the scores onto the
+    queries first, which is exact and leaves no fp16 copy of the scaled scores. The
+    band attentions normalize over 60 bands and keep fp16.
 
     Returns the number of time attentions rewritten.
     """

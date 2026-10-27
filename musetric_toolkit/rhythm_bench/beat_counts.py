@@ -5,10 +5,8 @@ import numpy as np
 # The counts of musetric/musetric#1108, "How a hypothesis is checked": an
 # interval is judged against the local beat, the median of the 13 intervals
 # around it; shorter than 0.8 of it is a spurious beat, longer than 1.25 of it
-# a gap. A tempo jump is the local beat moving by more than 15 % over 8 beats,
-# a switch to double or half time that spurious beats and gaps miss. The
-# median is the upper one of an even count, as in the scripts that measured
-# #1029 and #1031, so their numbers repeat.
+# a gap. A tempo jump is the local beat moving by more than 15 % over 8 beats.
+# The median is the upper one of an even count.
 
 NEIGHBOURS = 6
 SHORT = 0.8

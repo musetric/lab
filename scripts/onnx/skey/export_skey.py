@@ -9,17 +9,16 @@ so the browser/node side needs no DSP of its own:
       -> ChromaNet (ConvNeXt stack -> chroma -> 24)     [1, 24] (softmax'd)
       -> mean over batch -> softmax                     [24]
 
-Two vendored ops are swapped for ONNX-exportable equivalents that tolerate a
-dynamic time axis (the model is fed the whole track at once):
+Two vendored ops are swapped for numerically identical ONNX-exportable
+equivalents that tolerate a dynamic time axis (the model is fed the whole track
+at once):
 
-  * `nn.functional.layer_norm(x, x.shape[1:])` (affine-free, normalized_shape
-    would otherwise carry the dynamic time dim) -> explicit reduction.
+  * `nn.functional.layer_norm(x, x.shape[1:])` (affine-free) -> explicit
+    reduction.
   * `AdaptiveAvgPool2d((12, 1))` -> mean over the time axis (input H is already
-    12 chroma bins, so this is exact).
+    12 chroma bins).
 
-Both replacements are numerically identical, so the graph carries no
-approximation and its parity does not depend on the input material; run
-`validate_skey.py` to confirm.
+`validate_skey.py` checks the export against the torch pipeline.
 
 TRACE_SECONDS sizes the dummy clip used to trace the dynamic axes; it must stay
 long enough to survive ChromaNet's seven time-downsampling stages (each halves

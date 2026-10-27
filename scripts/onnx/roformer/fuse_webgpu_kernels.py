@@ -4,8 +4,7 @@
 The exported core spells several operations as chains of nodes, and on WebGPU every
 node of a chain is a dispatch over the whole tensor:
 
-- GELU as Div, Erf, Add, Mul and Mul over the feed-forward's hidden layer, which
-  onnxruntime does not fuse once the constants are fp16;
+- GELU as Div, Erf, Add, Mul and Mul over the feed-forward's hidden layer;
 - the interleaved rotary embedding as Mul, two Slices, Neg, Concat, Mul and Add over
   the queries and the keys;
 - the projection to heads as a MatMul and a Transpose that moves the head axis ahead

@@ -6,13 +6,13 @@ cheaper:
 
 - a pair runs on frames averaged by its `pool` factor and adds its change back
   at full rate, x + up(F(down x) - down x); its time positions are stretched by
-  the same factor, so relative distances keep their meaning;
+  the same factor;
 - bands from `merged_bands_from` up run merged in neighbouring pairs inside
   the pair, each merged band at the mean position of the two;
 - time attention may see only `time_window` frames on each side;
 - a pair may have fewer attention heads and a narrower feed-forward; an
   attention with fewer heads than `heads` carries a bias on its output
-  projection, the refit of the heads it lost;
+  projection;
 - a pair's band transformer may be a residual linear map, x + x W + b;
 - a pooled pair may add a linear path of the detail its pooled view cannot
   see (`detail`: "d" the stream minus its pooled view, "c" that view, "x" the
@@ -69,7 +69,7 @@ class Rotary(nn.Module):
     """Rotary embedding at explicit positions, computed in fp32: 0, s, 2s, ...
     for time attention over frames averaged by s, or the given `positions`
     (merged bands sit at the mean position of the two). The frequencies are
-    weights of the model: training moved them, the time and the band ones apart."""
+    weights of the model."""
 
     def __init__(
         self,

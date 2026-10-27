@@ -1,10 +1,8 @@
 """Rewrite the Whisper encoder's Conv stem as im2col plus MatMul, without a Transpose.
 
 `Conv` on the WebGPU execution provider transposes NCHW to NHWC internally, and
-that transpose is one of the shapes Adreno 600-series adapters compute wrong:
-a quarter of the output comes back as zeros. The stem is the first thing the
-encoder does, so all 32 layers downstream inherit it, and nothing reports a
-fault. See musetric/musetric#975.
+that transpose is one of the shapes Adreno 600-series adapters compute wrong.
+See musetric/musetric#975.
 
 A 1-D convolution is a matrix product once the kernel taps are laid out as
 channels, and the product can be arranged so that no transpose appears at all -

@@ -9,8 +9,7 @@ the WebGPU CQT pipeline:
       -> logits [W, 108, 170]
 
 It does not contain CQT extraction, frame padding/windowing, temporal smoothing,
-or argmax. Those stages stay outside the ONNX graph so the WebGPU runtime can
-keep its feature and logits buffers on the GPU.
+or argmax; those stages stay in the WebGPU runtime.
 
     uv run --group export python scripts/onnx/chordmini/export_chordnet.py \
       --out <export-dir> --models-path <checkpoint-cache-dir>

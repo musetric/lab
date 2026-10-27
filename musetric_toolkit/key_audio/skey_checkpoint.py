@@ -3,8 +3,7 @@ from pathlib import Path
 from musetric_toolkit.common.model_files import ensure_model_file
 
 # S-KEY checkpoint source. The S-KEY inference subset is vendored under
-# musetric_toolkit/key_audio/skey. See thirdPartyNotices.md. The commit is
-# pinned to the same revision previously consumed via the git dependency.
+# musetric_toolkit/key_audio/skey. See thirdPartyNotices.md.
 
 CHECKPOINT_URL = (
     "https://raw.githubusercontent.com/deezer/skey/"

@@ -2,18 +2,15 @@
 """Split beat_this's attention into head groups that fit one WebGPU storage binding.
 
 Every attention core in the graph is MatMul(q, k^T) -> Softmax -> MatMul(., v), and
-the scores between the two MatMuls are a single [b, h, frames, frames] tensor. At
-1500 frames that is 137 MiB for the 16 heads of the main transformer and 275 MiB for
-the 32 head slices of each frontend block. One WebGPU binding cannot hold that on the
-phones: the Adreno 750 (Galaxy S24) reports maxStorageBufferBindingSize 128 MiB and
-silently computes garbage above it, the Adreno 660 (OnePlus 9RT) breaks somewhere
-between 137 and 275 MiB although it reports 512 MiB. Both are exact up to 120 MiB.
+the scores between the two MatMuls are a single [b, h, frames, frames] tensor, too
+large for one WebGPU storage binding on the phones at 1500 frames
+(musetric/musetric#1029).
 
 Heads are independent, so the core is cut along the head axes (the first one longer
 than 1) into equal groups whose scores stay within --budget-mib, each group runs its
 own MatMul -> Softmax -> MatMul, and Concat restores the original output tensor.
-Slices are static Slice nodes (Split does not compile on Adreno, see
-split_to_slice_webgpu.py). The arithmetic of every output element is unchanged.
+Slices are static Slice nodes, not Split. The arithmetic of every output element is
+unchanged.
 
     uv run --group export python scripts/onnx/beat_this/split_attention_webgpu.py \
       --model <in.onnx> --shapes shapes1500.json --out <out.onnx> [--budget-mib 72]

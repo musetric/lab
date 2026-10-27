@@ -17,12 +17,9 @@ from musetric_toolkit.parity_audio.host_audio import POWER, read_mono
 # from the alignment heads' cross-attention cropped to the chunk. The original
 # is openai/whisper-large-v3-turbo in torch, and the author runs its `generate`
 # with the model's own defaults. The decoder is compared under teacher forcing,
-# one token per step with the cache as the product runs it, so that a token
-# that differs on a device does not change what the later steps see. The token
-# times of the reference follow transformers.js (`_extract_token_timestamps`)
-# on the torch cross-attention: `generate` of transformers 4.51 puts every
-# token of a chunk at the end of the window, so its times are kept for the
-# author only.
+# one token per step with the cache as the product runs it. The token times of
+# the reference follow transformers.js (`_extract_token_timestamps`) on the
+# torch cross-attention; the author's times are not compared.
 
 SAMPLE_RATE = 16000
 CHUNK_SAMPLES = 30 * SAMPLE_RATE
@@ -264,16 +261,13 @@ def run(args, writer: CaseWriter) -> None:
 
     send_message({"type": "progress", "progress": 0.1})
     model = load_original(device)
-    # The bundle's alignment heads index the cross-attention outputs its decoder
-    # keeps; the torch model returns every head, so its times take the original's.
+    # The times of the torch model read its own alignment heads, not the bundle's.
     config.alignment_heads = model.generation_config.alignment_heads
     features_t = torch.from_numpy(features).to(device)
     with torch.inference_mode():
         encoded = model.model.encoder(features_t).last_hidden_state
     writer.tensor("encoder.output", "original", encoded.double().cpu().numpy())
-    # The encoder ran once above; `generate` and the forward pass take its output
-    # rather than running it again with `output_attentions`, which would keep the
-    # attention weights of its 32 layers, 5.8 GB in float32, that nothing reads.
+    # `generate` and the forward pass take the encoder output computed above.
     encoder_outputs = BaseModelOutput(last_hidden_state=encoded)
     encoder = cpu_session(Path(args.onnx))
     (onnx_encoded,) = encoder.run(["last_hidden_state"], {"input_features": features})

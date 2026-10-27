@@ -6,12 +6,9 @@ batches them in groups of `maxStorageBuffersPerShaderStage`, so any node with to
 many inputs+outputs in a single program trips the hard device cap ("Too many
 storage buffers ...").
 
-That cap is *not* the same across platforms. Dawn/Vulkan on NVIDIA reports 16,
-but Dawn/Metal on macOS reports only **10** (a Metal argument-buffer limit; see
-https://issues.chromium.org/issues/505056912). We target the smallest shipping
-cap so one artifact runs everywhere: a shader touches `variable buffers + 1`
-storage buffers, so GROUP=8 keeps every rewritten node at <=9 storage buffers,
-clear of the macOS 10 floor.
+A shader touches `variable buffers + 1` storage buffers, so GROUP=8 keeps every
+rewritten node at <=9 storage buffers, under the 10 of Dawn/Metal
+(https://issues.chromium.org/issues/505056912).
 
 Concat (fixed axis) and Split (fixed axis) are associative, so each wide node is
 rewritten into a tree where every node touches <=GROUP variable buffers.
@@ -39,23 +36,17 @@ args.output.parent.mkdir(parents=True, exist_ok=True)
 model = onnx.load(str(args.input), load_external_data=True)
 graph = model.graph
 
-# Weights are now in `raw_data`; drop the stale external offsets from the source
-# layout so save_model re-serializes contiguously (otherwise it honours the old
-# offsets and writes a ~3x inflated, partly-sparse .data file).
+# Weights are now in `raw_data`; drop the external offsets of the source layout
+# so that save_model writes them contiguously.
 for t in graph.initializer:
     if t.data_location == onnx.TensorProto.EXTERNAL:
         t.data_location = onnx.TensorProto.DEFAULT
         del t.external_data[:]
 
 # --- Pass 0: keep attention Softmax in fp16 -------------------------------
-# The fp16 conversion wraps each Softmax in Cast(fp16->fp32)->Softmax->Cast
-# (a NaN guard). That fp32 score matrix is 480*1100*1100*4 = 2.32 GB > the 2 GB
-# WebGPU maxBufferSize cap. Dropping the casts keeps scores fp16 (1.16 GB), which
-# fits. After the export weight-sanitize the fp16 softmax is NaN-free
-# (the ~0.45% NaN was a single bad weight, not the softmax). See converting.md.
-# Only a Softmax wrapped on both sides is unwrapped: the time attentions of an
-# --all-fp16 core cast their scores to fp32 on purpose and feed the fp32
-# probabilities straight into their matmul with the values.
+# The fp16 conversion wraps each Softmax in Cast(fp16->fp32)->Softmax->Cast;
+# dropping the casts keeps the scores fp16. Only a Softmax wrapped on both sides
+# is unwrapped.
 producer = {o: n for n in graph.node for o in n.output}
 consumers: dict[str, list] = {}
 for n in graph.node:

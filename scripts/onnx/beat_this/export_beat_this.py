@@ -4,20 +4,15 @@ The graph covers only the neural boundary the WebGPU pipeline needs:
 
     beat_this.onnx  spect [W, F, 128] -> beat [W, F], downbeat [W, F]
 
-Feature extraction is not in the graph. The runtime computes the log-mel
-spectrogram on WebGPU (@musetric/fft STFT + the mel filterbank exported here),
-the same way the chords pipeline runs its CQT on WebGPU and keeps ChordNet as a
-feature-to-logits graph. Chunking, aggregation and peak picking also stay in the
-runtime: they are index arithmetic, not DSP.
+Feature extraction, chunking, aggregation and peak picking are not in the graph:
+the runtime computes the log-mel spectrogram on WebGPU (@musetric/fft STFT + the
+mel filterbank exported here) and does the rest itself.
 
 `mel-filterbank.bin` is torchaudio's own `MelScale.fb` written verbatim as
-row-major float32 [n_fft // 2 + 1, n_mels], so the runtime reuses the reference
-filterbank instead of reimplementing the slaney mel scale.
+row-major float32 [n_fft // 2 + 1, n_mels].
 
-One vendored construct is replaced at export time (the installed `beat_this`
-package is left untouched): `PartialFTTransformer.forward` reads its batch size
-with `len(x)`, which bypasses the tracer and freezes the window count into the
-graph.
+`PartialFTTransformer.forward` is replaced at export time; the installed
+`beat_this` package is left untouched.
 
     uv run --group export python scripts/onnx/beat_this/export_beat_this.py \
       --out <export-dir> --models-path <checkpoint-cache-dir>

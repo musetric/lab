@@ -1,9 +1,9 @@
-"""Reference generator for the full-graph WebGPU validation (gates 2-3).
+"""Reference generator for the full-graph validation.
 
-Decodes a real ~5s chunk from a track, runs the torch FullSeparator, and writes
-the input chunk + reference vocals as raw little-endian f32 (planar [2,220500])
-so the Node WebGPU validator (packages/ai/tmp/validate_full_webgpu.ts) can run
-the ONNX on WebGPU and compare.
+Takes the loudest window of --frames frames from a track, runs the torch
+FullSeparator on it, and writes the input chunk + reference vocals as raw
+little-endian f32, planar stereo. This repository carries no comparator that
+scores an execution provider against them.
 """
 
 # ruff: noqa: T201, N806
@@ -21,15 +21,7 @@ from musetric_toolkit.separate_audio.roformer.attend import Attend
 
 
 def loudest_window(mix: np.ndarray, length: int) -> int:
-    """Offset of the highest-energy window of `length` samples.
-
-    The file start is the wrong window to validate on. Normalization scales the
-    whole track by its global peak, so a quiet intro stays quiet after it, and
-    comparing two models over near-silence measures rounding noise instead of
-    separation: two cores that score 57.9 dB against torch on the loudest window
-    of a track both score 3.6 dB on its opening window, and agree to the digit
-    there whatever they do elsewhere.
-    """
+    """Offset of the highest-energy window of `length` samples."""
     power = (mix**2).mean(axis=0)
     total = np.concatenate(([0.0], np.cumsum(power, dtype=np.float64)))
     return int(np.argmax(total[length:] - total[:-length]))

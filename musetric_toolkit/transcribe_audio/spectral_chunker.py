@@ -1,12 +1,8 @@
 """Spectral chunking of vocal audio for WhisperX.
 
-Before transcription WhisperX splits audio into ``<= chunk_size`` second bins at
-pyannote VAD boundaries. On singing those boundaries are unreliable: pyannote
-reports "pauses" on momentary dips inside continuous singing, so chunk cuts land
-in the middle of a sustained note (which fragments words and hurts decoding).
-
-This module chooses cut points from the audio spectrum instead. Two per-frame
-features are derived from a short-time Fourier transform:
+This module chooses cut points from the audio spectrum instead of WhisperX's
+pyannote VAD boundaries. Two per-frame features are derived from a short-time
+Fourier transform:
 
 * ``energy``   - frame RMS amplitude.
 * ``flatness`` - spectral flatness (geometric mean / arithmetic mean of the

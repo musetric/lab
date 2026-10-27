@@ -1,15 +1,10 @@
 """Hand the host everything a decoder step reads in one tensor.
 
 A step of generation reads back the logits and the cross-attention weights of
-every layer an alignment head lives in. On the WebGPU execution provider each
-output read back from the device is its own copy, queue submission and wait,
-and that costs the same for a hundred values as for a hundred thousand: on a
-desktop NVIDIA, leaving two of four attention layers on the device took a step
-from 35.8 to 28.4 ms.
-
-This appends one float32 output, `step_outputs`, that concatenates the logits
-and those attention layers, each flattened, in that order. The original outputs
-stay in the graph, so a caller that does not know about the packed one is
+every layer an alignment head lives in. This appends one float32 output,
+`step_outputs`, that concatenates the logits and those attention layers, each
+flattened, in that order. The original outputs stay in the graph, so a caller
+that does not know about the packed one is
 unaffected; a caller that fetches only `step_outputs` and the key/value cache
 reads one tensor per step and cuts it back into the pieces from their shapes:
 

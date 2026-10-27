@@ -5,8 +5,6 @@ from musetric_toolkit.separate_audio.ffmpeg.read import read_audio_file
 # The mono audio the host sends to the analysis models: stereo decoded at the
 # model's rate, summed with the bundle's weight (packages/server/crates/media/
 # src/mono.rs), a half for the mean downmix and 1/sqrt 2 for the power one.
-# ffmpeg's `-ac 1` to float keeps 1/sqrt 2 for both, so the chains sum the
-# channels themselves.
 
 MEAN = 0.5
 POWER = 1.0 / np.sqrt(2.0)

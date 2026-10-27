@@ -1,27 +1,16 @@
 """Audit exported ONNX graphs for normalization epsilons that fp16 cannot carry.
 
-Two ways an epsilon dies in fp16, both of which leave a graph that passes every
-smoke test and then returns NaN on the first input with a near-zero row (padding,
-silence, a dead feature) - and one NaN row is enough to take the whole output out
-through the next softmax:
+1. A fused normalization (RMSNormalization, LayerNormalization, ...) on an fp16
+   node casts the reciprocal 1/sqrt(var + epsilon) to fp16, so its epsilon must
+   stay above 1/65504^2 = 2.33e-10.
 
-1. A fused normalization (RMSNormalization, LayerNormalization, ...) scales by the
-   reciprocal 1/sqrt(var + epsilon). A WebGPU kernel evaluates that reciprocal and
-   casts it to the tensor dtype, so on an fp16 node any row whose var + epsilon
-   falls below 1/65504^2 = 2.33e-10 gets +inf, then 0 * inf = NaN. Measured with a
-   one-node fp16 graph on a WebGPU adapter: whole-row NaN at eps <= 2.0e-10, clean
-   from 2.4e-10 up. This is what the separation core hit on iOS.
+2. A decomposed normalization (ReduceMean -> Add(eps) -> Sqrt -> Div) that keeps
+   its epsilon as an fp16 initializer below the smallest normal fp16 value,
+   6.10e-5, reads it as zero on a GPU that flushes denormals.
 
-2. A decomposed normalization (ReduceMean -> Add(eps) -> Sqrt -> Div) keeps the
-   epsilon as an fp16 initializer. Anything below the smallest normal fp16 value
-   6.10e-5 is a denormal, and GPUs that flush denormals - Apple's among them -
-   read it as exactly zero, so a zero-variance row divides 0 by 0.
-
-The rule this enforces is (1), which is unconditional. (2) is reported as a
-warning because it only fires on a flushing device and only for a row whose
-variance is exactly zero. Neither says anything about how *large* an epsilon may
-be: that is a quality question per model (on the roformer core, 1e-4 moves 2.7%
-of rows by more than 10%).
+The rule this enforces is (1). (2) is reported as a warning: it only fires on a
+flushing device and only for a row whose variance is exactly zero. Neither bounds
+how large an epsilon may be.
 
 Usage:
   uv run python scripts/onnx/roformer/fp16_epsilon_audit.py model.onnx [more.onnx ...]

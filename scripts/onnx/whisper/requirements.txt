@@ -1,19 +1,13 @@
-# Stay below 4.43: transformers 4.43 adds a `cache_position` decoder input to
-# the Whisper ONNX graph, which @huggingface/transformers 4.2.0 (the musetric
-# runtime) does not feed, breaking generate(). 4.42.x keeps the legacy inputs.
 transformers[torch]==4.42.4
-# Pin torch to a 2024-era build: its torch.onnx.export uses the legacy
-# TorchScript exporter (unpinned torch 2.13 forces the dynamo/onnxscript path,
-# which mismatches optimum 1.21.3). CPU wheel on Windows/PyPI.
+# The PyPI wheel, CPU-only on Windows.
 torch==2.4.1
 onnxruntime==1.19.2
 optimum==1.21.3
-# Bound optimum's transitive datasets (else uv backtracks to pandas 0.13.1).
 datasets>=2.18,<3
 onnx==1.16.2
 onnxconverter-common==1.14.0
 tqdm==4.66.5
 onnxslim==0.1.31
-# graphsurgeon is only imported (not exercised in the q4 path); PyPI build is
-# fine — the 0.3.27 pin lived on NVIDIA's NGC index, which 403s under uv.
+# graphsurgeon is only imported (not exercised in the q4 path); the PyPI build
+# is enough.
 onnx-graphsurgeon

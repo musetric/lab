@@ -3,20 +3,15 @@
 
 - Transpose families that select the broken shared-tile kernel
   ((0,2,1), (0,1,3,2), (0,3,1,2), (0,3,2,1), (2,0,1)) become
-  Reshape(1D) -> Gather(const int32 idx) -> Reshape(target). The primitive was
-  verified bit-exact against the untouched graph on both Adreno phones.
+  Reshape(1D) -> Gather(const int32 idx) -> Reshape(target).
   Rank-5 (2,0,3,1,4) head-split transposes and rank-4 (0,2,1,3) are kept.
 - Conv becomes Pad + Reshape + Gather(im2col idx) + MatMul(reshaped weights,
-  bias added back). Verified faithful to the original Conv within fp32
-  accumulation noise.
-- Inference BatchNormalization becomes Mul + Add (folded running stats). The
-  isolated BN kernel on Adreno 660 WebGPU zeroes about half the output
-  nondeterministically; the affine form is bit-exact on device.
+  bias added back).
+- Inference BatchNormalization becomes Mul + Add (folded running stats).
 
 Ship the rewrite pinned at the author's 1500 frames, then split the attention
-with split_attention_webgpu.py: a whole 1500x1500 scores tensor does not fit one
-storage binding on the phones and comes back wrong. The rewrite itself is the
-same at any frame count; only the index tables grow with it.
+with split_attention_webgpu.py. The rewrite itself is the same at any frame
+count; only the index tables grow with it.
 
 Tensor shapes come from `capture_shapes.py` because ONNX shape inference
 cannot resolve runtime-computed Reshape shapes.

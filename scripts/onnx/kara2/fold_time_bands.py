@@ -1,12 +1,8 @@
 # ruff: noqa: T201
 """Fold the time axis of UVR-MDX-NET KARA2 into bands carried in the batch axis.
 
-onnxruntime-web runs Conv, ConvTranspose and BatchNormalization on WebGPU in
-NHWC and inserts a layout Transpose around them. For a batch of one, that
-Transpose reduces to a single [C, H * W] matrix swap, which the Adreno 6xx
-computes wrongly (the tiled Transpose that drops a quarter of its output); for a
-batch of several matrices it does not take that path. The original graph's
-operators are themselves correct there.
+It keeps the layout Transposes onnxruntime-web puts around its NHWC kernels off
+a batch of one (musetric/musetric#954).
 
 This rewrite keeps every operator of the original graph and holds each tensor
 of the U-Net body, [1, C, T, F] in the source, as [B, C, T / B, F]: B
@@ -20,8 +16,7 @@ they run on the bands unchanged.
 The 1x1 input convolution and its Relu move after the source's first Transpose
 (a 1x1 convolution commutes with it). The 1x1 output convolution runs as a
 MatMul on the bands, and a rank-3 Reshape follows it before the bands are joined
-back into time: an NHWC convolution there would let onnxruntime move its layout
-Transpose past the join onto a batch of one.
+back into time.
 
 The graph keeps the source's input and output, pinned to batch 1.
 
