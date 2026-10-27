@@ -74,6 +74,24 @@ musetric-rhythm \
   --log-level info  # debug|info|warn|error (default: info)
 ```
 
+Check the beats the metronome would click on a set of tracks: Beat This! in
+torch with a chosen window and postprocessing, the counts of spurious beats,
+gaps and tempo jumps, and renders with clicks to listen to. It measures the
+hypotheses of musetric/musetric#1108 and is not a processing step; its
+commands are in [rhythm_bench/readme.md](musetric_toolkit/rhythm_bench/readme.md).
+
+```bash
+musetric-rhythm-bench reference \
+  --audio-path /path/to/corpus \  # an audio file, or a directory of them
+  --file-name instrumental.flac \  # optional: take <track>/instrumental.flac of each subdirectory
+  --label instrumental \  # input name in the variant names
+  --window 1500 \  # window in frames (default: 1500)
+  --results-dir /path/to/results  # output: <track>/<variant>.json and logits
+musetric-rhythm-bench score \
+  --results-dir /path/to/results \
+  --variants instrumental-w1500-dbn instrumental-w1500-minimal  # variants to count
+```
+
 Detect the musical key (root + mode) with S-KEY.
 
 ```bash

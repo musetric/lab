@@ -15,6 +15,7 @@
 - `musetric_toolkit/separate_audio`: audio source separation (BSRoformer, MelBandRoformer, MDX-Net, FFmpeg).
 - `musetric_toolkit/transcribe_audio`: speech transcription via WhisperX.
 - `musetric_toolkit/rhythm_audio`: tempo, beat, and rhythm analysis.
+- `musetric_toolkit/rhythm_bench`: the beats the metronome would click, their counts of musetric/musetric#1108 and listening renders (`musetric-rhythm-bench`).
 - `musetric_toolkit/key_audio`: musical key detection.
 - `musetric_toolkit/chords_audio`: chord detection and recognition.
 - `musetric_toolkit/pitch_audio`: the reference pitch track the Musetric pitch bench scores against (RMVPE, CREPE, SwiftF0 and FCPE combined).
