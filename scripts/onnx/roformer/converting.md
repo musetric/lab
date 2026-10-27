@@ -98,9 +98,12 @@ What each flag is for:
 - `--attn-block 128` caps the attention score tensor of a slab at
   `[15, 8, 128, T]` instead of `[15, 8, T, T]`. Exact — softmax normalizes each
   query row over the full key axis on its own — and it is what keeps the graph
-  inside a mobile storage-buffer binding, which stops working past 256 MiB
-  whatever limit the adapter declares. The time attentions hold that block in
-  fp32 (below), 64.5 MiB, the size the fp16 block of 256 rows had.
+  inside one storage binding on the phones: on the Adreno 750 and 660 a binding
+  above about 120 MiB comes out wrong, on the Adreno 660 below the 512 MiB it
+  reports
+  ([musetric/musetric#975](https://github.com/musetric/musetric/issues/975#issuecomment-6427186493)).
+  The time attentions hold that block in fp32 (below), 64.5 MiB, the size the
+  fp16 block of 256 rows had.
 - `--fuse-rmsnorm` gives the normalization a single `ai.onnx::RMSNormalization`
   kernel that accumulates the sum of squares in `f32` inside the shader.
 - `--all-fp16` drops the fp32 pins, which the fused RMSNorm makes safe. Without
@@ -370,9 +373,7 @@ which attention spreads over the whole time axis — a silent output, not a
 warning. `--all-fp16` therefore emits `RMSNORM_EPS_FP16` (1e-9) instead of
 `RMSNORM_EPS` (1e-12); the exporter refuses to write a graph that breaks the
 rule, and `fp16_epsilon_audit.py` re-checks any artifact, including ones built
-elsewhere. This shipped broken once — `epsilon=1e-12` on all 96 fp16 nodes — and
-`packages/mobile/docs/iosWebgpu.md` in the `musetric` repository carries the
-device measurements.
+elsewhere. This shipped broken once, with `epsilon=1e-12` on all 96 fp16 nodes.
 
 ## Fuse Node Chains for onnxruntime-web
 
@@ -473,3 +474,9 @@ manual validation tool and is not wired into the default lab CLI.
 - Delete stale `.onnx.data` files before saving external-data models; the scripts
   do this.
 - Keep generated model files out of git unless explicitly publishing artifacts.
+- `MelBandRoformer` keeps `mlp_expansion_factor` but does not pass it to
+  `MaskEstimator`, whose hidden layers are always four times `dim` wide. The
+  Duality config does not set the factor, and its checkpoint holds that width;
+  a config that sets another factor still gets four, without a warning, and a
+  checkpoint trained with that factor fails to load on the mask estimator's
+  shapes.
