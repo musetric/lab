@@ -7,9 +7,8 @@ This copies exactly that set into the workspace's
 `models/whisper-large-v3-turbo-onnx/`, the clone published through git.
 
 The encoder is checked against `mobile_encoder.verify` and both decoders against
-`mobile_decoder.verify` on the way through: a stock export cannot run on several
-mobile GPUs and returns wrong answers on others, and the faults are silent at
-runtime. Staging refuses rather than let such a graph reach the model repo.
+`mobile_decoder.verify` on the way through, and staging refuses a graph that
+fails them.
 
     uv run python scripts/onnx/whisper/stage_whisper.py \
       --export tmp/whisper-export/openai/whisper-large-v3-turbo

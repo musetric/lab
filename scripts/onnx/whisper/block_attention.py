@@ -2,13 +2,11 @@
 
 The exported encoder computes each layer's attention in one shot: `MatMul` of
 `(20, 1500, 64)` queries with `(20, 64, 1500)` keys produces a `(20, 1500, 1500)`
-fp32 score tensor - 171.7 MiB. WebGPU guarantees only 128 MiB per storage
-binding, and Adreno 750 (Galaxy S24) offers exactly that minimum, so the encoder
-cannot run there at all: the `Softmax` dispatch fails to bind its input.
+fp32 score tensor - 171.7 MiB, past the 128 MiB WebGPU guarantees per storage
+binding.
 
 Softmax normalizes each query row independently, so slicing the queries into
-blocks and concatenating the per-block outputs is *exact* - not an approximation
-and not the online-softmax bookkeeping flash attention needs. This rewrites
+blocks and concatenating the per-block outputs is *exact*. This rewrites
 
     scores = MatMul(q, kT); probs = Softmax(scores); out = MatMul(probs, v)
 
@@ -36,9 +34,8 @@ from onnxruntime.tools.symbolic_shape_infer import SymbolicShapeInference
 with contextlib.suppress(Exception):
     sys.stdout.reconfigure(encoding="utf-8")
 
-# The WebGPU floor for `maxStorageBufferBindingSize`, which is also exactly what
-# Adreno 750 reports. Sizes are printed against it so a run states whether it
-# actually achieved anything.
+# The WebGPU floor for `maxStorageBufferBindingSize`; sizes are printed against
+# it.
 BINDING_LIMIT = 128 * 1024 * 1024
 # 1500 query rows split into six blocks; caps the score tensor at 28.6 MiB.
 QUERY_BLOCK = 250

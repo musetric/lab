@@ -1,12 +1,7 @@
 import re
 
-# Whisper large-v3 was trained on large dumps of YouTube/OpenSubtitles captions,
-# so on near-silent or instrumental regions it emits memorized caption boilerplate
-# ("subtitle credits") that never occurs in song lyrics. These artifacts are
-# language-specific but highly stereotyped; we drop any segment whose text is
-# dominated by such boilerplate.
-#
-# References: known faster-whisper / openai-whisper hallucination corpora.
+# Caption boilerplate Whisper writes on near-silent or instrumental regions, such
+# as subtitle credits; a segment whose text matches any pattern is dropped.
 
 _HALLUCINATION_PATTERNS = [
     # Russian caption credits, e.g. "Субтитры создавал DimaTorzok",
@@ -36,10 +31,8 @@ _HALLUCINATION_PATTERNS = [
     r"transcri(?:bed|ption)\s+by",
     r"www\.",
     r"\.com\b",
-    # Caption boilerplate emitted on instrumental / silent outros
-    # (e.g. "© transcript", "Emily Beynon"): the copyright-transcript signature
-    # never occurs in sung lyrics, and "Emily Beynon" is a well-known Whisper
-    # credit hallucination.
+    # The copyright-transcript signature and a credit of instrumental or silent
+    # outros.
     r"©\s*transcript",
     r"emily\s+beynon",
 ]

@@ -1,16 +1,8 @@
 """Replace the one Transpose shape Adreno 600-series adapters get wrong with a Gather.
 
-`Transpose` on the WebGPU execution provider returns a quarter of its output as
-zeros there, deterministically and with no error. The cause is in the provider's
-shader: it stages the tile in `array<array<T, tile_size + 1>, tile_size>`, and
-on that hardware a workgroup array whose size is not a multiple of 512 bytes
-loses the stores of one warp out of four across `workgroupBarrier`.
-
-Only the shapes that reach that shader are affected: after leading extents of
-one are squeezed away, a rank-2 permutation that swaps both axes. In this graph
-that is one node - a rank-3 tensor with a leading one whose last two axes swap.
-The permutations attention uses, rank 4 and rank 3 with a real leading batch,
-take a different kernel and are exact. See musetric/musetric#975.
+The affected shape is, after leading extents of one are squeezed away, a rank-2
+permutation that swaps both axes (musetric/musetric#975). In this graph that is
+one node - a rank-3 tensor with a leading one whose last two axes swap.
 
 `Gather` against a precomputed index table returns the same permutation exactly
 on the same device, so this rewrites

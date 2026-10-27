@@ -1,77 +1,35 @@
 # S-KEY → ONNX export
 
 Exports the vendored **S-KEY** key detector (harmonic VQT + ChromaNet) to a
-single self-contained ONNX graph consumed by the
-[`musetric`](https://github.com/musetric/musetric) `@musetric/ai` runtime on
-**onnxruntime-web**.
+single self-contained ONNX graph for the `@musetric/ai` runtime on
+**onnxruntime-web**, published as [`musetric/skey-onnx`](https://huggingface.co/musetric/skey-onnx).
+The graph bakes the whole `run_skey` pipeline, which `export_skey.py` lays out:
+the runtime feeds a whole track of raw mono audio at 22050 Hz, peak-normalized,
+and reads back the 24 key probabilities, with no DSP of its own.
 
-Like the chordmini export (and unlike whisper's transformers.js layout), the
-graph bakes the whole `run_skey` pipeline, so the runtime feeds raw mono audio
-and reads back the 24 key probabilities with no DSP of its own:
-
-```
-audio [1, N] @ 22050 Hz mono, peak-normalized
-  → nnAudio harmonic VQT (log-amplitude HCQT)   [1, 1, 99, T]
-  → crop 84 bins (CropCQT, transpose 0)         [1, 1, 84, T]
-  → ChromaNet (ConvNeXt stack → chroma → 24)    [1, 24] (softmax'd)
-  → mean over batch → softmax                   [24]
-```
-
-The whole track is fed at once (the runner does the same); ChromaNet's time
-pooling collapses it to one key.
-
-## Dynamic-axis swaps
-
-Two vendored ops don't export with a dynamic time axis and are replaced by
-numerically identical equivalents at export time (the vendored source is left
-untouched):
-
-| vendored op | replacement | why |
-|---|---|---|
-| `nn.functional.layer_norm(x, x.shape[1:])` (affine-free) | explicit mean/var reduction | `normalized_shape` would carry the dynamic time dim |
-| `AdaptiveAvgPool2d((12, 1))` | mean over the time axis | input already has H=12 chroma bins; not ONNX-exportable with dynamic width |
-
-Both replacements are numerically identical, so the graph carries **no
-approximation** and its parity does not depend on the input material (unlike the
-chordmini export, which substitutes librosa's CQT). `validate_skey.py` confirms
-the key argmax and confidence against the torch runner.
-
-## Files
-
-| script | role |
-|---|---|
-| `export_skey.py` | build the `audio → probs` graph, write `skey.onnx` + `config.json` |
-| `validate_skey.py` | key-index agreement of the ONNX vs the torch run_skey pipeline |
-| `stage_skey.py` | copy the file set into the clone of `musetric/skey-onnx` |
-
-All paths are explicit arguments; the scripts carry no implicit defaults.
+- The export swaps the affine-free `layer_norm` and `AdaptiveAvgPool2d((12, 1))` of the vendored code for numerically identical forms with a dynamic time axis; the vendored source stays untouched.
+- The graph stays in fp32.
+- The audio decoder is part of the contract: `ffmpeg` and `torchaudio` move `confidence` by about 1e-4.
+- Validate on the material the model is fed in production, the instrumental stem.
+- Every path is an explicit argument; the scripts have no implicit defaults.
 
 ## Run
 
-The export reuses the main lab env (it imports the vendored S-KEY code) plus
-the `export` dependency group (`onnx`):
+The export takes the main lab environment, for the vendored S-KEY code, plus
+the `export` group:
 
 ```sh
-uv run --group export python scripts/onnx/skey/export_skey.py \
-  --out <export-dir> --models-path <checkpoint-cache-dir>
-
-uv run --group export python scripts/onnx/skey/validate_skey.py \
-  --onnx <export-dir>/skey.onnx --audio <audio-dir> \
-  --models-path <checkpoint-cache-dir>
-
-uv run python scripts/onnx/skey/stage_skey.py \
-  --export <export-dir> --dest ../models/skey-onnx
+uv run --group export python scripts/onnx/skey/export_skey.py --out <export-dir> --models-path <checkpoint-cache-dir>
+uv run --group export python scripts/onnx/skey/validate_skey.py --onnx <export-dir>/skey.onnx --audio <audio-dir> --models-path <checkpoint-cache-dir>
+uv run python scripts/onnx/skey/stage_skey.py --export <export-dir> --dest ../models/skey-onnx
 ```
 
-The staged files are published from that clone through git, as the
-[practice of models](https://github.com/musetric/headquarters/blob/main/practices/models.md)
-describes.
+`export_skey.py` writes `skey.onnx` and `config.json`, `validate_skey.py`
+compares the key index of the ONNX with the torch pipeline's, and
+`stage_skey.py` copies the file set into the clone of the model repository,
+published through git by the [practice of models](https://github.com/musetric/headquarters/blob/main/practices/models.md).
+The checkpoint `skey.pt` is fetched on first run.
 
-Validate on the material the model is fed in production — the **instrumental
-stem**.
-
-The checkpoint (`skey.pt`, ~0.75 MB) is fetched on first run. The exported graph
-is ~0.33 MB fp32 — tiny, so no quantization.
-
-S-KEY is vendored under `musetric_toolkit/key_audio/skey`; see
-`thirdPartyNotices.md` for source and license.
+S-KEY is vendored under `musetric_toolkit/key_audio/skey`; its source and
+license are in `thirdPartyNotices.md`. The export came with
+[musetric/lab#62](https://github.com/musetric/lab/pull/62).

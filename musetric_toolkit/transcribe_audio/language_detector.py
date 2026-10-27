@@ -4,11 +4,9 @@ import logging
 import numpy as np
 
 # The language is the majority of the three loudest decode windows, as in the
-# browser runtime (packages/ai/src/transcription/transcribePipeline.ts): a quiet
-# window, an intro without singing, makes Whisper write a caption in English
-# and must not outvote the sung ones. Detection stops once one language holds
-# a majority; without one, the most voted language wins and the louder window
-# breaks a tie.
+# browser runtime (packages/ai/src/transcription/transcribePipeline.ts).
+# Detection stops once one language holds a majority; without one, the most
+# voted language wins and the louder window breaks a tie.
 LANGUAGE_WINDOWS = 3
 
 

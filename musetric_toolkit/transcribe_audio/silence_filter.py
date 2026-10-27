@@ -1,7 +1,7 @@
 import numpy as np
 
 # A segment is dropped when its RMS is below this share of the median segment
-# RMS. There is no absolute floor: a quiet but sung stem would lose every line.
+# RMS.
 SILENCE_RMS_RATIO = 0.2
 
 

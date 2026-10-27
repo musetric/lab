@@ -1,13 +1,8 @@
 """Keep the decoder's small products out of the float16 subnormal range.
 
-Adreno GPUs compute float16 without subnormals: a product below 2^-14 is zero
-even when both factors are normal numbers, and a stored value below 2^-14 is
-read as zero. Three products of a decoder step are sums of exactly such terms -
-attention probabilities times values, the attention output times `out_proj`,
-and the GELU tail times `fc2` - and on an Adreno each loses a fifth to a half
-of its result, which moves logits by up to 2 at a scale of 22 and word times
-with them (musetric#881). NVIDIA keeps subnormals, so its numbers stay close
-to the CPU.
+Three products of a decoder step are sums of terms below 2^-14, which Adreno GPUs
+compute as zero in float16: attention probabilities times values, the attention
+output times `out_proj`, and the GELU tail times `fc2` (musetric/musetric#881).
 
 The pass scales what those products read by 2^10, exactly, and folds the scale
 away where it would be seen:
@@ -21,14 +16,11 @@ away where it would be seen:
   larger;
 - each layer norm is scale-free apart from its epsilon, which takes 2^20; the
   nine-node pattern becomes one `LayerNormalization` (opset 17) carrying that
-  epsilon as an attribute, because ONNX Runtime's pattern fusion reads the
-  epsilon back as the default 1e-5 on a provider that casts float16 constants
-  first, the CPU one among them;
+  epsilon as an attribute;
 - the cross-attention softmax runs in float32, feeds the `cross_attentions`
   output as float32 straight away, and its probabilities are scaled by 2^10
-  before the cast to float16 that the value product reads: what a float16
-  softmax would flush is kept down to 2^-24, and the 2^10 lands on the
-  attention output like the self-attention one.
+  before the cast to float16 that the value product reads, so the 2^10 lands on
+  the attention output like the self-attention one.
 
 Every scale is a power of two, so nothing changes on a GPU that keeps
 subnormals except the float32 softmax, which is more precise. The logits and

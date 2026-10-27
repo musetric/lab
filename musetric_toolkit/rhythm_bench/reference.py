@@ -15,7 +15,7 @@ from musetric_toolkit.rhythm_bench.variant import variant_path
 # matches (musetric/musetric#1031). The track is cut into windows of the given
 # number of frames with a border of 6, and where windows overlap the first
 # window's frames are kept, as the author's inference does: 1500 frames is the
-# author's window and the app's, 513 the window the app ran before #1029.
+# author's window and the app's.
 BORDER_SIZE = 6
 
 

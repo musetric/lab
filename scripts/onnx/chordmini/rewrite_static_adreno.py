@@ -3,28 +3,21 @@
 
 - Transpose families that select the broken shared-tile kernel
   ((0,2,1), (0,1,3,2), (0,3,1,2), (0,3,2,1), (2,0,1)) become
-  Reshape(1D) -> Gather(const int32 idx) -> Reshape(target). The primitive was
-  verified bit-exact against the untouched graph on both Adreno phones.
+  Reshape(1D) -> Gather(const int32 idx) -> Reshape(target).
   Rank-5 (2,0,3,1,4) head-split transposes and rank-4 (0,2,1,3) are kept.
 - Conv becomes Pad + Reshape + Gather(im2col idx) + MatMul(reshaped weights,
-  bias added back). Verified faithful to the original Conv within fp32
-  accumulation noise.
+  bias added back).
 - A four-dimensional MatMul folds its two batch axes into one, and a MatMul
   whose constant weight has a width that is not a multiple of four is widened
-  with zero columns and sliced back. Both shapes return wrong values on Adreno
-  750 while the shapes they become are exact there. With --vec4-attention a
-  four-dimensional MatMul of more than eight rows is padded to the vec4 kernel
-  instead of folded.
+  with zero columns and sliced back. With --vec4-attention a four-dimensional
+  MatMul of more than eight rows is padded to the vec4 kernel instead of folded.
 
 Tensor shapes come from `capture_shapes.py` because ONNX shape inference
 cannot resolve runtime-computed Reshape shapes.
 
 Every Gather index and Reshape target is baked for the captured batch and
-frames, so the rewritten graph runs at that shape and no other. Its input and
-output dims are pinned to it: a graph that still declares `windows` looks
-batchable and fails inside a Reshape on any other batch, and a symbolic dim
-keeps the shape arithmetic of the source graph from folding, which leaves it on
-the CPU and blocks WebGPU graph capture.
+frames, so the rewritten graph runs at that shape and no other; its input and
+output dims are pinned to it.
 
 The rewrite is faithful. The Adreno defects it avoids, and those it does not,
 are listed with their workarounds in musetric/musetric#975.
@@ -166,9 +159,6 @@ def rewrite_transpose(
 def rewrite_matmul(ctx: RewriteContext, node: onnx.NodeProto) -> bool:
     """Compute a four-dimensional MatMul as a three-dimensional one.
 
-    On Adreno 750 the WebGPU MatMul kernel returns wrong values for some
-    four-dimensional extents while the same extents in three dimensions are
-    exact, which is what makes the chord attention disagree with wasm there.
     Folding the two batch axes into one is exact: a batched MatMul multiplies
     each matrix of the batch on its own, whatever the batch is shaped like.
     """
@@ -223,14 +213,12 @@ def pad_matmul_vec4(ctx: RewriteContext, node: onnx.NodeProto) -> bool:
     """Pad a four-dimensional MatMul of two activations to the vec4 kernel.
 
     onnxruntime's WebGPU MatMul takes its vec4 kernel when K and N are
-    multiples of four and a scalar one otherwise, and the Adreno 750 driver
-    miscompiles the scalar one for two- and four-dimensional products. Zero
-    rows and columns along K add nothing to the product, and the extra output
-    columns along N are sliced off, so every real value keeps its arithmetic.
+    multiples of four. Zero rows and columns along K add nothing to the product,
+    and the extra output columns along N are sliced off, so every real value
+    keeps its arithmetic.
 
-    Only products with more than eight rows: with fewer, onnxruntime runs the
-    vec4 kernel with one row per thread, which is wrong on Adreno 660 for most
-    N; those keep the fold into three dimensions.
+    Only products with more than eight rows; those with fewer keep the fold into
+    three dimensions.
     """
     left = ctx.shapes.get(node.input[0])
     right = ctx.shapes.get(node.input[1])
@@ -315,11 +303,8 @@ def pad_matmul_vec4(ctx: RewriteContext, node: onnx.NodeProto) -> bool:
 def pad_matmul_width(ctx: RewriteContext, node: onnx.NodeProto) -> bool:
     """Widen a constant MatMul weight to a multiple of four columns.
 
-    On Adreno 750 the WebGPU MatMul kernel returns wrong values when the output
-    width is not a multiple of four: the classifier of this model,
-    [16, 108, 144] x [144, 170], differs from wasm by 4.2 there, while the same
-    product at 168 or 172 columns is exact. The extra columns are zeros and the
-    result is sliced back, so every real column keeps its arithmetic.
+    The extra columns are zeros and the result is sliced back, so every real
+    column keeps its arithmetic.
     """
     weight = ctx.initializers.get(node.input[1])
     if weight is None or len(weight.dims) != RANK_2D:

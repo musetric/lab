@@ -86,19 +86,12 @@ class Attend(nn.Module):
         if not _backends_logged["value"]:
             logging.debug("Using manual attention computation (matmul-based)")
             _backends_logged["value"] = True
-        # MatMul (not einsum): MatMul is supported on every onnxruntime EP
-        # (WebGPU / DirectML / CUDA / CoreML / TensorRT) and is the form their
-        # attention fusions match; einsum coverage on DirectML/CoreML is spotty.
-        # sim = q @ k^T ; out = attn @ v  (math-identical to the einsum path).
+        # MatMul in place of the upstream einsum, with the same values:
+        # sim = q @ k^T ; out = attn @ v.
         scale = q.shape[-1] ** -0.5
 
-        # q_block splits the QUERY axis, not the key axis, so no online softmax is
-        # needed: softmax normalizes each query row over the full key axis on its
-        # own, and the rows of a block never see the other blocks. The result is
-        # the same values, computed with a peak score tensor of [b,h,q_block,n]
-        # instead of [b,h,n,n]. For the time-attention layers of this model that
-        # is 480*q_block*n*2 bytes instead of 480*n²*2 — the difference between
-        # fitting in a mobile storage buffer and not. Costs the same FLOPs.
+        # q_block splits the query axis into blocks; exact, since softmax
+        # normalizes each query row over the full key axis on its own.
         if self.q_block and q.shape[-2] > self.q_block:
             outputs = []
             for start in range(0, q.shape[-2], self.q_block):
@@ -115,13 +108,6 @@ class Attend(nn.Module):
     def softmax(self, sim):
         # softmax_rows splits the score tensor over its batch axis so that no
         # softmax sees more rows than that. Exact: every row normalizes on its own.
-        # The point is a WebGPU kernel that dispatches one workgroup per row with no
-        # bounds check; past the per-dimension workgroup cap the dispatch goes 2D,
-        # the spare workgroups write past the end of the output, and on an
-        # exact-size buffer that lands on its last row. The band-attention scores of
-        # this model are [T, 8, 60, 60], 528000 rows at T=1100. Only the softmax is
-        # chunked: splitting q/k/v instead multiplies the matmul dispatches and
-        # measured more than twice the cost.
         if self.softmax_rows:
             rows_per_batch = math.prod(sim.shape[1:-1])
             parts = row_chunks(sim.shape[0], rows_per_batch, self.softmax_rows)

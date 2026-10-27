@@ -1,13 +1,8 @@
 """Make the merged Whisper decoder compute correctly on mobile GPUs.
 
-On Adreno 600-series adapters the WebGPU `MatMul` kernel that packs its operands
-into vec4 returns wrong values when the left operand has few rows. A decoder
-multiplies exactly such operands in every attention score - one query row per
-cached step, the prompt on the first step - and the key length reaches a
-multiple of four on every fourth self-attention step and on every
-cross-attention step. `pad_attention_scores` keeps those products off the packed
-kernel. The defect is musetric/musetric#886; musetric/musetric#975 lists it
-with the GPU defects the models work around.
+`pad_attention_scores` keeps the decoder's attention score products off the
+packed vec4 WebGPU `MatMul` kernel that Adreno 600-series adapters get wrong
+(musetric/musetric#886).
 
 The rewrite applies to both merged decoders, float16 and q4, and is idempotent.
 `stage_whisper.py` runs the same check before it stages a decoder.

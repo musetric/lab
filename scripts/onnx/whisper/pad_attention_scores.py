@@ -1,14 +1,9 @@
 """Keep the decoder's attention scores off the WebGPU MatMul kernel Adreno 600 breaks.
 
 The WebGPU execution provider multiplies `A [batch, M, K] x B [batch, K, N]` with
-a packed vec4 shader whenever both `K` and `N` are multiples of four. On Adreno
-600-series adapters that shader returns wrong values when `M` is small, as it is
-in a decoder (one query row per cached step, the prompt on the first step): with
-`K = 64` and `N` the key length, every `N` that is a multiple of four but not of
-32 comes back as garbage, in float16 and float32 alike. Self-attention hits it
-on every fourth step as the cache grows; cross-attention hits it on every step,
-because the key length is 1500. The corrupted hidden state then feeds the next
-layers' keys and values, so the cache carries the error to every later step.
+a packed vec4 shader whenever both `K` and `N` are multiples of four, which
+Adreno 600-series adapters get wrong when `M` is small, as in a decoder
+(musetric/musetric#886).
 
 The attention score is `MatMul(Q, Transpose(K, perm=[0, 2, 1]))`. This appends
 one zero column to `Q` and one zero row to the transposed key, so the product
@@ -20,14 +15,7 @@ runs with `K = 65`:
 is exact on the same device. The added row and column multiply to zero, so every
 score is the number it was, and the output keeps its shape: no slice afterwards.
 
-Both paddings are constants, which is the point. Padding the key length instead
-would have to read that length at run time (`Shape -> Gather -> Mod -> Equal`),
-and shape arithmetic runs on the CPU provider: it splits the step's GPU work into
-pieces and forces a synchronisation around each attention. Measured on
-`decoder_model_merged_fp16` at 30 s of audio, the run-time form cost 64.1 ms per
-token on a desktop NVIDIA against 33.5 ms without any padding, and added 14 queue
-submissions per token; the head dimension is known at export and costs none of
-that.
+Both paddings are constants, so no shape arithmetic runs around each attention.
 
     uv run python scripts/onnx/whisper/pad_attention_scores.py \
       --input  decoder_model_merged_fp16.onnx \

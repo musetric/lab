@@ -1,28 +1,13 @@
 """Make the exported Whisper encoder run, and run correctly, on mobile GPUs.
 
-Two independent defects stand between the stock export and a phone, and neither
-is in the weights. This applies the three graph rewrites that clear them, in
-order, on a single load of the graph, then checks that the result actually is
-clear. `stage_whisper.py` runs the same check before it stages anything, so an
-encoder that skipped this step cannot reach the model repo.
+This applies three graph rewrites, in order, on a single load of the graph, then
+checks that the result is clear. `stage_whisper.py` runs the same check before
+it stages anything.
 
-**The graph is too big to bind.** Each layer computes attention in one shot, so
-its score tensor is `(20, 1500, 1500)` fp32 = 171.7 MiB, while WebGPU only
-guarantees 128 MiB per storage binding and several mobile adapters offer exactly
-that minimum. The encoder does not run there at all. `block_attention` splits
-the queries into blocks and concatenates the per-block outputs, which is exact
-because softmax normalizes each query row over the full key axis on its own.
-
-**The graph computes the wrong answer.** On Adreno 600-series adapters the
-WebGPU `Transpose` returns a quarter of its output as zeros - silently, with no
-NaN and no error. The cause is in the execution provider's shader: it stages the
-tile in `array<array<T, tile_size + 1>, tile_size>`, 16 x 17 f32 = 1088 bytes,
-and on that hardware a workgroup array whose size is not a multiple of 512 bytes
-loses the stores of one warp out of four across `workgroupBarrier`. The stores
-land - a thread reads its own slot back correctly - but the other threads do not
-see them. `conv_to_matmul` and `transpose_to_gather` route the encoder around
-every shape that reaches that shader. The defect is kept in
-musetric/musetric#975.
+- `block_attention` splits the attention queries into blocks, so each score
+  tensor fits the 128 MiB per storage binding that WebGPU guarantees;
+- `conv_to_matmul` and `transpose_to_gather` route the encoder around every
+  `Transpose` shape Adreno 600-series adapters get wrong (musetric/musetric#975).
 
     uv run python scripts/onnx/whisper/mobile_encoder.py \
       --input  tmp/whisper-export/.../onnx/encoder_model_q4.onnx \

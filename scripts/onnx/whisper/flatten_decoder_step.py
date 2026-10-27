@@ -2,12 +2,7 @@
 
 The merged decoder holds two copies of the network behind an `If`: the first step
 (no cache, the prompt, cross-attention keys and values computed from the encoder)
-and every later step (one token, everything cached). On the WebGPU execution
-provider the `If` costs far more than the branch it picks: ONNX Runtime does not
-fuse through it, so a cached step runs as some 650 small kernels. Measured on the
-same inputs with the outputs kept on the device, a cached step takes 20.1 ms
-merged and 10.4 ms flat on a desktop NVIDIA, 49.7 against 30.9 ms on an Adreno
-750.
+and every later step (one token, everything cached).
 
 This writes two graphs:
 
@@ -19,8 +14,7 @@ This writes two graphs:
 
 The first step is then the cross projection plus the prompt fed through the step
 graph one token at a time, which applies exactly the causal mask the first branch
-builds for the whole prompt. On CPU the prompt's last logits match the merged
-first step to 0.008 at a scale of 11.6, fp16 rounding, with the same argmax.
+builds for the whole prompt.
 
     uv run python scripts/onnx/whisper/flatten_decoder_step.py \
       --input  decoder_model_merged_fp16.onnx \

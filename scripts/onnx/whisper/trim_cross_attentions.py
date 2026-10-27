@@ -1,15 +1,9 @@
 """Emit only the cross-attention heads the word times are read from.
 
-`generate` asks the decoder for the cross-attention weights of every layer, and
-the graph answers with all twenty heads of all four layers: `[batch, 20, tokens,
-1500]` per layer, cast to float32 on the way out. Word times use six of those
-eighty head slices (`alignment_heads` in the generation config), and the rest is
-copied out of the device and dropped.
-
-This narrows each `cross_attentions.*` output to the heads that config names,
-inside both branches of the merged decoder, and rewrites `alignment_heads` to
-the new positions. Layers no head is taken from keep one, because the pipeline
-concatenates one tensor per decoder layer before it indexes them.
+This narrows each `cross_attentions.*` output to the heads `alignment_heads`
+names in the generation config, inside both branches of the merged decoder, and
+rewrites `alignment_heads` to the new positions. Layers no head is taken from
+keep one.
 
     uv run python scripts/onnx/whisper/trim_cross_attentions.py \
       --input  decoder_model_merged_fp16.onnx \

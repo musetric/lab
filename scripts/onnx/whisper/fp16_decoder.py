@@ -1,23 +1,8 @@
 """Convert the merged Whisper decoder to float16 for onnxruntime-web.
 
-`quantize.py --modes fp16` does not produce a usable graph for this model, for
-three independent reasons, all handled here:
-
-* it runs the converted model through `onnx_graphsurgeon` to repair node
-  ordering, and graphsurgeon hoists every top-level initializer *into* both `If`
-  branches -- for the turbo decoder that turns a 344 MB graph into 661 MB;
-* with `keep_io_types` the converter renames the value each branch produces and
-  the `If` node's outputs to match, but leaves the branch's declared outputs on
-  the old names, so ORT reports them as outer-scope values and refuses the
-  model;
-* a wholly float16 graph cannot be driven by the pipeline as it stands: the
-  encoder ships as q4 and hands over float32 hidden states, and running the
-  word-timestamp DTW over float16 attention maps reorders words within a line.
-
-So the conversion runs without `keep_io_types`, `encoder_hidden_states` is taken
+The conversion runs without `keep_io_types`: `encoder_hidden_states` is taken
 back to float32 and cast on entry, `logits` and `cross_attentions.*` are cast
-back on the way out, and the KV cache stays float16 end to end -- it is fed
-straight back into float16 inputs and halves the cache's memory.
+back on the way out, and the KV cache stays float16 end to end.
 
 Ordering is then repaired in place, which needs the `If` branches' outer-scope
 reads to count as dependencies of the `If` node itself.
