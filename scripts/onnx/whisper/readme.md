@@ -262,6 +262,36 @@ uv run python scripts/onnx/whisper/flatten_decoder_step.py --input X --step Y --
 uv run python scripts/onnx/whisper/scale_residual_stream.py --input X --output Y
 ```
 
+### Finding the graph a provider gets wrong
+
+The parity run of Musetric compares each graph on wasm and on WebGPU from the
+same inputs ([`measure:parity`](https://github.com/musetric/musetric/blob/main/packages/ai/readme.md#parity-run)).
+In a page that drives the whole pipeline, transformers.js also takes `device`
+as a map keyed by the graph's file name, so one graph moves to another
+provider while the other stays:
+
+```js
+await pipeline('automatic-speech-recognition', modelId, {
+  device: { encoder_model: 'webgpu', decoder_model_merged: 'wasm' },
+});
+```
+
+The map decides only while `session_options.executionProviders` is unset:
+transformers.js fills the providers from `device` only when they are missing,
+and the runtime of Musetric sets them for every graph. The graph whose move
+changes the output is the one the provider gets wrong, and its passes are then
+bisected one at a time as above.
+
+### Writing a pass
+
+A pass keys the nodes it replaces by their position in `graph.node`, as
+`conv_to_matmul.py` and `transpose_to_gather.py` do, not by `id(node)`. The
+`id()` of a protobuf node's Python wrapper is recycled between loops over
+`graph.node`, so an `id()` recorded in one loop can name an unrelated node in
+the next, and the rewrite replaces that node without an error.
+`block_attention.py` keys by `id()` and holds every node it matched in its
+list of chains until the rewrite is done.
+
 ## Publish
 
 The staged files are published from the clone through git, as the
