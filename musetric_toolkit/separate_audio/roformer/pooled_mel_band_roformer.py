@@ -1,29 +1,3 @@
-"""Mel-Band RoFormer with pooled tokens: the shape of Musetric's distilled vocals model.
-
-It keeps the band split, the six pairs of time and band transformers and the
-mask estimator of the Mel-Band RoFormer it was distilled from, and makes them
-cheaper:
-
-- a pair runs on frames averaged by its `pool` factor and adds its change back
-  at full rate, x + up(F(down x) - down x); its time positions are stretched by
-  the same factor;
-- bands from `merged_bands_from` up run merged in neighbouring pairs inside
-  the pair, each merged band at the mean position of the two;
-- time attention may see only `time_window` frames on each side;
-- a pair may have fewer attention heads and a narrower feed-forward; an
-  attention with fewer heads than `heads` carries a bias on its output
-  projection;
-- a pair's band transformer may be a residual linear map, x + x W + b;
-- a pooled pair may add a linear path of the detail its pooled view cannot
-  see (`detail`: "d" the stream minus its pooled view, "c" that view, "x" the
-  stream);
-- the mask estimator's middle layer is low-rank, and the estimator runs on
-  frames averaged by `mask_pool`, its masks repeated.
-
-Input, output and the host side (STFT, iSTFT, band gather) are those of
-MelBandRoformer, so `net_forward` is the same ONNX boundary.
-"""
-
 import torch
 from einops import pack, rearrange, unpack
 from rotary_embedding_torch import apply_rotary_emb
@@ -36,7 +10,6 @@ from musetric_toolkit.separate_audio.roformer.mel_band_roformer import (
 
 
 def down(x: torch.Tensor, p: int, axis: int) -> torch.Tensor:
-    """Means of p neighbours along `axis`, the last one repeated to fill the tail."""
     if p == 1:
         return x
     n = x.shape[axis]
@@ -50,12 +23,10 @@ def down(x: torch.Tensor, p: int, axis: int) -> torch.Tensor:
 
 
 def up(y: torch.Tensor, p: int, axis: int, n: int) -> torch.Tensor:
-    """Each value repeated p times along `axis`, cut to n."""
     return y if p == 1 else y.repeat_interleave(p, dim=axis).narrow(axis, 0, n)
 
 
 def merge_bands(x: torch.Tensor, first: int) -> torch.Tensor:
-    """(b, t, f, d) with the bands from `first` up averaged in neighbouring pairs."""
     high = x[:, :, first:]
     high = high.reshape(*high.shape[:2], high.shape[2] // 2, 2, high.shape[3]).mean(3)
     return torch.cat([x[:, :, :first], high], 2)
@@ -66,10 +37,6 @@ def unmerge_bands(y: torch.Tensor, first: int) -> torch.Tensor:
 
 
 class Rotary(nn.Module):
-    """Rotary embedding at explicit positions, computed in fp32: 0, s, 2s, ...
-    for time attention over frames averaged by s, or the given `positions`
-    (merged bands sit at the mean position of the two). The frequencies are
-    weights of the model."""
 
     def __init__(
         self,
@@ -105,7 +72,6 @@ class Rotary(nn.Module):
 
 
 class LocalAttend(nn.Module):
-    """Attention over the keys within `window` positions of the query."""
 
     def __init__(self, window: int):
         super().__init__()
@@ -120,7 +86,6 @@ class LocalAttend(nn.Module):
 
 
 class BandMap(nn.Module):
-    """A band transformer replaced by a residual linear map: x + x W + b."""
 
     def __init__(self, dim: int):
         super().__init__()
@@ -131,10 +96,6 @@ class BandMap(nn.Module):
 
 
 class PooledMelBandRoformer(MelBandRoformer):
-    """MelBandRoformer with per-pair token pooling and narrowed parts. The
-    per-pair settings are lists of `depth` entries; the rest of the arguments
-    are MelBandRoformer's. The mask estimator has depth 2, the first and the
-    last layer of MelBandRoformer's with a middle of rank `mask_rank`."""
 
     def __init__(  # noqa: PLR0913
         self,
@@ -152,7 +113,6 @@ class PooledMelBandRoformer(MelBandRoformer):
         **kwargs,
     ):
         kwargs.pop("mask_estimator_depth", None)
-        # depth 1 builds the first and the last layer; the low-rank middle goes between
         super().__init__(dim, mask_estimator_depth=1, **kwargs)
         self.pool, self.merged_bands_from = pool, merged_bands_from
         self.mask_pool, self.detail_kinds = mask_pool, detail
@@ -190,7 +150,6 @@ class PooledMelBandRoformer(MelBandRoformer):
         self._low_rank_middle(dim * 4, mask_rank)
 
     def _low_rank_middle(self, hidden: int, rank: int) -> None:
-        """Every band's mask MLP gets a middle layer of rank `rank`."""
         for estimator in self.mask_estimators:
             for band in estimator.to_freqs:
                 first_layer, tanh, last_layer = band[0]
@@ -203,7 +162,6 @@ class PooledMelBandRoformer(MelBandRoformer):
 
     @staticmethod
     def _band_positions(first: int | None, num_bands: int) -> list[float] | None:
-        """Band positions with the bands from `first` up merged in pairs."""
         if first is None:
             return None
         merged = [first + 2 * j + 0.5 for j in range((num_bands - first) // 2)]
@@ -236,7 +194,6 @@ class PooledMelBandRoformer(MelBandRoformer):
         return features @ w.to(features.dtype) + b.to(features.dtype)
 
     def net_forward(self, stft_repr: torch.Tensor) -> torch.Tensor:
-        # stft_repr: (b, f*s, t, c=2) real; returns masks (b, n, f, t, c=2) real
         batch = stft_repr.shape[0]
         batch_arange = torch.arange(batch, device=stft_repr.device)[..., None]
         x = stft_repr[batch_arange, self.freq_indices.to(stft_repr.device)]

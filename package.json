@@ -2,9 +2,19 @@
   "name": "@musetric/lab",
   "private": true,
   "devDependencies": {
-    "@musetric/checks": "0.1.0"
+    "@musetric/checks": "0.2.0"
   },
   "checks": {
+    "comments": {
+      "except": [
+        "musetric_toolkit/chords_audio/chordmini/**",
+        "musetric_toolkit/key_audio/skey/**",
+        "musetric_toolkit/pitch_audio/rmvpe/**",
+        "scripts/onnx/whisper/convert.py",
+        "scripts/onnx/whisper/quantize.py",
+        "scripts/onnx/whisper/extra/**"
+      ]
+    },
     "english": {
       "except": [
         "musetric_toolkit/chords_audio/chordmini/**",

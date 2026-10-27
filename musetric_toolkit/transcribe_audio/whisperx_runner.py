@@ -47,12 +47,8 @@ from musetric_toolkit.transcribe_audio.spectral_chunker import (
     map_time,
 )
 
-# WhisperX integration for transcription and alignment.
-# WhisperX is BSD-2-Clause; see thirdPartyNotices.md.
-
 
 def configure_torch_serialization() -> None:
-    # Allowlist safe types used by OmegaConf/typing in PyTorch weights-only loads.
     torch.serialization.add_safe_globals(
         [
             omegaconf.listconfig.ListConfig,
@@ -262,17 +258,6 @@ def intercept_progress_lines(tracker: ProgressTracker):
 
 @contextmanager
 def use_precomputed_chunks(chunks):
-    """Force WhisperX to decode exactly ``chunks`` for one transcribe call.
-
-    WhisperX groups pyannote VAD speech into ``<= chunk_size`` second bins via
-    ``Pyannote.merge_chunks`` and decodes ``audio[start:end]`` for each. We pass
-    it a silence-free *compacted* audio (voiced spans concatenated) plus the
-    matching span boundaries in compacted time, so each inference call carries a
-    full budget of real singing with the long silences removed; timestamps are
-    mapped back to the real timeline afterwards (see ``transcribe_with_whisperx``).
-    The pyannote VAD still runs on the compacted audio but its segmentation is
-    discarded here.
-    """
     from whisperx.vads.pyannote import Pyannote  # noqa: PLC0415
 
     original_merge_chunks = Pyannote.merge_chunks
@@ -284,7 +269,6 @@ def use_precomputed_chunks(chunks):
 
 
 def remap_segments_to_original(segments, mapping):
-    """Map compacted-time segment and word timestamps back to the real timeline."""
     for segment in segments:
         if segment.get("start") is not None:
             segment["start"] = round(map_time(float(segment["start"]), mapping), 3)
@@ -298,72 +282,45 @@ def remap_segments_to_original(segments, mapping):
     return segments
 
 
-# --- Collapse repair -------------------------------------------------------
-#
-# A collapse is a repeated lyric Whisper decodes once and then drops, leaving
-# singing with no words. A long, phonetically busy window that aligned words
-# barely cover, or a caption hallucination, is decoded again in two halves, each
-# after a runway of earlier clean audio and a silence pad. The runway text is
-# trimmed off by alignment, and the halves replace the window only when they are
-# real, diverse, non-looped content with more words.
+_MIN_WINDOW_SECONDS = 12.0
+_MIN_ONSET_RATE = 2.0
+_MAX_COVERED_FRACTION = 0.30
+_MIN_UNCOVERED_SECONDS = 8.0
+_MIN_REPAIR_WORD_GAIN = 3
+_MIN_UNIQUE_RATIO = 0.35
 
-_MIN_WINDOW_SECONDS = 12.0  # only long windows can hide a collapse
-_MIN_ONSET_RATE = 2.0  # syllable onsets/s below this is a held note, not singing
-_MAX_COVERED_FRACTION = 0.30  # aligned-word coverage below this fraction -> suspect
-_MIN_UNCOVERED_SECONDS = 8.0  # ... with at least this many voiced-but-wordless seconds
-_MIN_REPAIR_WORD_GAIN = 3  # a repair must add at least this many words
-_MIN_UNIQUE_RATIO = 0.35  # below this the rebuild is a loop / vowel chant, not lyrics
+_WINDOW_CAP_SECONDS = 30.0
+_RUNWAY_SECONDS = 15.0
+_RUNWAY_PAD_SECONDS = 1.5
+_RUNWAY_SNAP_SECONDS = 2.5
+_MIN_HALF_SECONDS = 6.0
+_MIN_CLEAN_PAYLOAD_SECONDS = 6.0
+_MIN_RUNWAY_BUDGET_SECONDS = 4.0
 
-_WINDOW_CAP_SECONDS = 30.0  # hard clamp on any decode slice (the model's budget)
-_RUNWAY_SECONDS = 15.0  # stable lead-in taken from the nearest clean window
-_RUNWAY_PAD_SECONDS = 1.5  # silence spliced between runway and payload
-_RUNWAY_SNAP_SECONDS = 2.5  # snap the half-split point to a nearby silence
-_MIN_HALF_SECONDS = 6.0  # each rebuilt half must span at least this
-_MIN_CLEAN_PAYLOAD_SECONDS = 6.0  # a runway-source window needs this much singing
-_MIN_RUNWAY_BUDGET_SECONDS = 4.0  # skip a repair if less runway than this fits
-
-# Loop signatures used by :func:`_looks_looped`.
 _LOOP_MIN_TOKENS = 4
-_LOOP_RUN_LENGTH = 6  # this many identical tokens in a row is a decoder loop
+_LOOP_RUN_LENGTH = 6
 _LOOP_DOMINANCE_MIN_TOKENS = 8
-_LOOP_DOMINANCE_RATIO = 0.6  # one token covering this fraction of a line is a loop
+_LOOP_DOMINANCE_RATIO = 0.6
 
-# Spectral-flux onset detection (:func:`_syllable_onsets`).
-_ONSET_BAND_HZ = (100, 4000)  # vocal band the flux is measured in
-_ONSET_MIN_FRAMES = 5  # too few frames to judge an onset rate
+_ONSET_BAND_HZ = (100, 4000)
+_ONSET_MIN_FRAMES = 5
 
-# --- Loop guard -------------------------------------------------------------
-#
-# A chunk whose text compresses far better than natural language is a decoder
-# loop ("nein, nein, nein, ...") and is decoded again. Detection is whisper's own
-# compression-ratio test, at a threshold above whisper's 2.4; the retries add the
-# repetition constraints CTranslate2 accepts through `generate`, as the browser
-# runtime's guard does.
 _LOOP_COMPRESSION_RATIO = 3.5
-_LOOP_MIN_BYTES = 48  # shorter texts compress unpredictably
+_LOOP_MIN_BYTES = 48
 _LOOP_GUARD_LADDER = (
     {"no_repeat_ngram_size": 3},
     {"no_repeat_ngram_size": 3, "repetition_penalty": 1.15},
 )
 
-# --- Halves -----------------------------------------------------------------
-#
-# A long window whose aligned words stop early or leave a long gap is decoded
-# again as two halves, and the halves replace it when they give more words. The
-# browser runtime does the same with its own word times
-# (packages/ai/src/runtime/whisper/whisperRuntime.ts).
-_HALVES_MIN_SECONDS = 12.0  # only long windows are split
-_HALVES_COVERAGE = 0.6  # words ending before this share of the window -> split
-_HALVES_MAX_GAP_SECONDS = 6.0  # a gap this long between words -> split
-_HALVES_MIN_GAIN = 3  # the halves must add at least this many words
+_HALVES_MIN_SECONDS = 12.0
+_HALVES_COVERAGE = 0.6
+_HALVES_MAX_GAP_SECONDS = 6.0
+_HALVES_MIN_GAIN = 3
 
-# The lead with the backing at half level is what is transcribed, as in the
-# app's host (packages/server/src/analysis/transcribe.rs).
 BACKING_WEIGHT = 0.5
 
 
 class Aligner(typing.NamedTuple):
-    """The WhisperX alignment model bundled with the data its calls need."""
 
     model: object
     metadata: object
@@ -371,7 +328,6 @@ class Aligner(typing.NamedTuple):
 
 
 class Compaction(typing.NamedTuple):
-    """Outputs of the spectral compaction, passed together to the repair pass."""
 
     audio: object
     chunks: list
@@ -384,22 +340,11 @@ def _word_count(text: str) -> int:
 
 
 def _unique_ratio(text: str) -> float:
-    """Lexical diversity of the normalised text (lower-cased, punctuation gone)."""
     words = re.sub(r"[^\w\s]", " ", (text or "").lower()).split()
     return len(set(words)) / len(words) if words else 1.0
 
 
 def _looks_looped(text: str) -> bool:
-    """True when the payload is dominated by a repeated token/phrase loop.
-
-    ``_unique_ratio`` is a *global* diversity check, so a real prefix can mask a
-    long tail loop: "the world in your hand ha ha ha ... ha" scores 6/16=0.38 and
-    passes, yet the 12x "ha" is a decoder loop the rebuild injected. This catches
-    such payloads two ways: a long run of one identical token, or one token that
-    dominates a non-trivial payload -- both signatures of a decoder loop, neither
-    fired by a genuinely repeated *lyric* (a word sung twice stays short and its
-    token never dominates the line).
-    """
     tokens = re.sub(r"[^\w\s]", " ", (text or "").lower()).split()
     if len(tokens) < _LOOP_MIN_TOKENS:
         return False
@@ -418,15 +363,6 @@ def _looks_looped(text: str) -> bool:
 
 
 def _syllable_onsets(window_audio) -> int:
-    """Count syllable/note onsets in a 16 kHz window via spectral flux.
-
-    A collapse drops lyrics over audio that is *phonetically busy* -- many
-    syllable onsets (rapid spectral change). A sustained vowel ("oh", "nein") or
-    a quiet/instrumental stretch has an almost static spectrum, so very few
-    onsets. Counting onsets therefore tells "there really are words here" apart
-    from "this is genuinely a held note / near-silence", which word coverage
-    alone cannot. Returns the number of detected onsets in the window.
-    """
     import numpy as np  # noqa: PLC0415
 
     win, hop = 1024, 256
@@ -444,8 +380,6 @@ def _syllable_onsets(window_audio) -> int:
     if flux.size < _ONSET_MIN_FRAMES or flux.max() <= 0:
         return 0
     flux = flux / flux.max()
-    # Onset = local max above an adaptive floor, with a refractory gap so one
-    # syllable is not counted twice (>= ~110 ms apart -> max ~9 onsets/s).
     floor = max(0.12, float(flux.mean() + 0.5 * flux.std()))
     gap = round(0.11 * SAMPLE_RATE / hop)
     onsets = 0
@@ -463,7 +397,6 @@ def _syllable_onsets(window_audio) -> int:
 
 
 def _word_coverage(words, start, end) -> float:
-    """Seconds of ``[start, end]`` overlapped by any aligned word interval."""
     covered = 0.0
     for word_start, word_end in words:
         lo, hi = max(start, word_start), min(end, word_end)
@@ -473,7 +406,6 @@ def _word_coverage(words, start, end) -> float:
 
 
 def _concat_pad(head, tail):
-    """Splice ``head`` and ``tail`` with a short silence pad between them."""
     import numpy as np  # noqa: PLC0415
 
     pad = np.zeros(int(_RUNWAY_PAD_SECONDS * SAMPLE_RATE), dtype=head.dtype)
@@ -481,13 +413,6 @@ def _concat_pad(head, tail):
 
 
 def _decode_span(model, window_audio, language, option_overrides=None) -> str:
-    """Decode one audio window without timestamps; return its plain text.
-
-    The window is decoded as a single chunk; the model's options are restored
-    afterwards so this never leaks state into the main transcribe pass.
-    ``option_overrides`` patches the decode options for this call only -- the
-    loop guard uses it to add repetition constraints.
-    """
     from dataclasses import replace  # noqa: PLC0415
 
     duration = len(window_audio) / SAMPLE_RATE
@@ -513,15 +438,6 @@ def _decode_span(model, window_audio, language, option_overrides=None) -> str:
 
 
 def _payload_after_seam(aligner, audio_slice, text, seam):
-    """Align ``text`` over ``audio_slice`` and return the words past ``seam``.
-
-    A rebuilt slice begins with ``seam`` seconds of runway that earlier audio
-    already transcribed. Localized alignment gives word-level times inside the
-    slice, so the runway is dropped by a hard timestamp cut at ``seam`` and only
-    the genuinely new payload text is kept. Returns ``(payload_text,
-    payload_word_count)``; on any alignment failure returns ``("", 0)`` so the
-    caller falls back to the safe original decode.
-    """
     if not text.strip():
         return "", 0
     duration = len(audio_slice) / SAMPLE_RATE
@@ -549,17 +465,6 @@ def _payload_after_seam(aligner, audio_slice, text, seam):
 
 
 def plan_collapse_repairs(model, compaction, segments, aligned_segments, language):
-    """Flag collapsed windows and decode each one's runway-fed halves.
-
-    Detection uses the aligned timeline: a long, phonetically busy window whose
-    aligned words cover too little of it is a collapse suspect, as is a caption
-    hallucination. For each flagged window the split point is snapped to a silence
-    near its centre and two slices are built -- ``runway ++ pad ++ head`` and
-    ``runway ++ pad ++ tail`` -- where the runway is the tail of the nearest
-    earlier *clean* window. Each slice is decoded here (ASR only); trimming and
-    acceptance are deferred to :func:`apply_collapse_repairs` so the heavy
-    alignment runs once, at the end. Returns one spec per repairable window.
-    """
     audio, chunks = compaction.audio, compaction.chunks
     cut_points = sorted(
         {round(float(m[0]), 3) for m in compaction.mapping}
@@ -609,8 +514,6 @@ def plan_collapse_repairs(model, compaction, segments, aligned_segments, languag
         if not flagged[index]:
             continue
         s, e = float(window["start"]), float(window["end"])
-        # Runway = tail of the nearest earlier *non-flagged* window (clean audio);
-        # without such a window the repair has no safe momentum, so skip it.
         prior = next(
             (
                 j
@@ -658,12 +561,6 @@ def plan_collapse_repairs(model, compaction, segments, aligned_segments, languag
 
 
 def apply_collapse_repairs(candidates, segments, aligner):
-    """Trim each candidate's runway, keep sane halves, splice them in.
-
-    A window is replaced only when the rebuilt payload is real, diverse,
-    non-looped, non-hallucinated content with more words than the collapsed
-    original, so the repair can never make a window worse than the plain decode.
-    """
     for cand in candidates:
         halves = []
         total_words = 0
@@ -712,12 +609,6 @@ def _is_looped(text: str) -> bool:
 
 
 def repair_looped_segments(model, audio, segments, language):
-    """Re-decode every segment whose text is a decoder loop.
-
-    Each retry walks :data:`_LOOP_GUARD_LADDER` until the text stops looping;
-    a retry that still loops (or empties the window) is discarded, so the guard
-    can never make a segment worse than the plain decode.
-    """
     for segment in segments:
         text = (segment.get("text") or "").strip()
         if not _is_looped(text):
@@ -740,7 +631,6 @@ def repair_looped_segments(model, audio, segments, language):
 
 
 def _needs_halves(words, start: float, end: float) -> bool:
-    """True when a window's aligned words stop early or leave a long gap."""
     duration = end - start
     if duration < _HALVES_MIN_SECONDS:
         return False
@@ -760,12 +650,6 @@ def _needs_halves(words, start: float, end: float) -> bool:
 
 
 def split_windows_in_halves(model, compaction, segments, aligned_segments, language):
-    """Decode again in halves every window that stopped early or skipped a stretch.
-
-    A half whose text loops or is a caption is dropped; the halves replace the
-    window only when they give at least ``_HALVES_MIN_GAIN`` more words. Returns
-    the segments and whether any window was replaced.
-    """
     audio = compaction.audio
     aligned_words = [
         (float(w["start"]), float(w["end"]))
@@ -808,7 +692,6 @@ def split_windows_in_halves(model, compaction, segments, aligned_segments, langu
 
 
 def load_voice(audio_path: str, backing_path: str | None):
-    """The lead, with the backing added at ``BACKING_WEIGHT`` when given."""
     audio = whisperx.load_audio(audio_path)
     if backing_path:
         backing = whisperx.load_audio(backing_path)
@@ -837,18 +720,12 @@ def transcribe_with_whisperx(
             compute_type=compute_type,
             vad_method="pyannote",
             vad_options={
-                # Chunk boundaries come from the spectral chunker (see
-                # use_precomputed_chunks) and the language from the loudest
-                # windows; WhisperX still runs this VAD, its output unused.
                 "vad_onset": 0.45,
                 "vad_offset": 0.35,
             },
         )
     audio = load_voice(audio_path, backing_path)
 
-    # Pack the spectral voiced spans into full-budget chunks and concatenate them
-    # into a silence-free buffer. Transcription and alignment both run on this
-    # compacted audio; ``mapping`` carries every timestamp back to real time.
     packed_chunks = compute_packed_chunks(audio, chunk_size=30)
     compacted_audio, chunks, mapping = build_compaction(audio, packed_chunks)
     compaction = Compaction(compacted_audio, chunks, packed_chunks, mapping)
@@ -859,7 +736,6 @@ def transcribe_with_whisperx(
     progress_tracker = ProgressTracker()
     progress_tracker.report_fraction(0.0)
 
-    # Pass 1: decode the whole compacted track in one sweep.
     with intercept_progress_lines(progress_tracker), use_precomputed_chunks(chunks):
         result = model.transcribe(
             compacted_audio,
@@ -896,10 +772,6 @@ def transcribe_with_whisperx(
             print_progress=False,
         ).get("segments", [])
 
-    # Pass 2: align the first decode to get word timestamps, decode again in
-    # halves the windows that stopped early or skipped a stretch, flag windows
-    # where the prior collapsed a repeated line (vocal energy, no words), and
-    # rebuild those windows from runway-fed re-decodes.
     with intercept_progress_lines(progress_tracker):
         detect_aligned = align_for_detection(segments)
         segments, replaced = split_windows_in_halves(
@@ -917,7 +789,6 @@ def transcribe_with_whisperx(
     segments = filter_silent_segments(segments, compacted_audio)
     segments = filter_hallucinated_segments(segments)
 
-    # Final alignment on the repaired transcript.
     try:
         with intercept_progress_lines(progress_tracker):
             aligned = whisperx.align(

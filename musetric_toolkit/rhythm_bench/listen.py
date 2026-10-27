@@ -8,10 +8,6 @@ import soundfile as sf
 from musetric_toolkit.rhythm_bench.track_files import track_files
 from musetric_toolkit.rhythm_bench.variant import read_variant
 
-# Each window of a `windows` result, with 3 s before and after, rendered once
-# per variant: the audio at 0.7 with the variant's clicks on top, a short
-# decaying tone like the metronome of the player, higher on a downbeat.
-
 MARGIN_SECONDS = 3.0
 MIX_GAIN = 0.7
 CLICK_SECONDS = 0.05

@@ -7,14 +7,6 @@ from musetric_toolkit.chords_audio.chordmini_runner import CONFIG_PATH, run_chor
 from musetric_toolkit.parity_audio.case_writer import CaseWriter
 from musetric_toolkit.parity_audio.host_audio import MEAN, read_mono
 
-# The chords step: the host sends the whole track, mono at 22050 Hz from the mean
-# downmix; the product computes the log constant-Q transform on the GPU from a
-# plan, zero pads it to whole windows of 108 frames, runs ChordNet on 16 windows
-# at a time (packages/server/src/analysis/models.rs chord_net_graph), sums each
-# frame's logits over the 9 frames around it inside its window and takes the
-# largest. The original is the ChordMini checkpoint in torch on the author's
-# librosa features, normalized by the checkpoint's mean and deviation.
-
 SAMPLE_RATE = 22050
 HOP_LENGTH = 2048
 N_BINS = 144

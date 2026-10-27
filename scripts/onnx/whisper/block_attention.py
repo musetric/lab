@@ -1,24 +1,3 @@
-"""Split Whisper encoder attention along the query axis so it fits mobile GPUs.
-
-The exported encoder computes each layer's attention in one shot: `MatMul` of
-`(20, 1500, 64)` queries with `(20, 64, 1500)` keys produces a `(20, 1500, 1500)`
-fp32 score tensor - 171.7 MiB, past the 128 MiB WebGPU guarantees per storage
-binding.
-
-Softmax normalizes each query row independently, so slicing the queries into
-blocks and concatenating the per-block outputs is *exact*. This rewrites
-
-    scores = MatMul(q, kT); probs = Softmax(scores); out = MatMul(probs, v)
-
-into one such chain per query block plus a final `Concat`, which caps the score
-tensor at `block / 1500` of its former size and leaves every weight untouched
-(the q4 `MatMulNBits` nodes are not read, let alone requantized).
-
-    uv run python scripts/onnx/whisper/block_attention.py \
-      --input  tmp/whisper-export/.../onnx/encoder_model_q4.onnx \
-      --output tmp/whisper-export/.../onnx/encoder_model_q4.onnx
-"""
-
 # ruff: noqa: T201
 
 import argparse
@@ -34,25 +13,17 @@ from onnxruntime.tools.symbolic_shape_infer import SymbolicShapeInference
 with contextlib.suppress(Exception):
     sys.stdout.reconfigure(encoding="utf-8")
 
-# The WebGPU floor for `maxStorageBufferBindingSize`; sizes are printed against
-# it.
 BINDING_LIMIT = 128 * 1024 * 1024
-# 1500 query rows split into six blocks; caps the score tensor at 28.6 MiB.
 QUERY_BLOCK = 250
 ELEMENT_BYTES = {TensorProto.FLOAT: 4, TensorProto.FLOAT16: 2}
-# `(heads, queries, keys)`, the shape the exporter emits once it has folded the
-# heads into the batch. Anything else is not the attention this rewrites.
 SCORE_RANK = 3
 
 
 class Attention:
-    """One `MatMul -> Softmax -> MatMul` chain found in the graph."""
 
     def __init__(self, score, softmax, reshape, context, shape):
         self.score = score
         self.softmax = softmax
-        # The exporter emits a rank- and shape-preserving `Reshape` between
-        # `Softmax` and the context `MatMul`; it is a no-op the rewrite drops.
         self.reshape = reshape
         self.context = context
         self.shape = shape
@@ -65,8 +36,6 @@ class Attention:
         dims = static_shape(self.shape)
         heads = dims[0]
         if not isinstance(heads, int):
-            # Symbolic shape inference folds the heads into the batch and writes
-            # it as `20*batch_size`; the runtime always feeds one batch.
             heads = int(str(heads).split("*")[0])
         element = ELEMENT_BYTES.get(self.shape.type.tensor_type.elem_type, 4)
         return heads * queries * dims[2] * element
@@ -80,21 +49,18 @@ def static_shape(value_info):
 
 
 def scores_of(softmax, shapes, producers):
-    """The `MatMul` feeding this `Softmax`, if its scores can be query-blocked."""
     score = producers.get(softmax.input[0])
     if score is None or score.op_type != "MatMul":
         return None, None
     shape = shapes.get(score.output[0])
     if shape is None or len(static_shape(shape)) != SCORE_RANK:
         return None, None
-    # Slicing needs a statically known query extent to cut at.
     if not isinstance(static_shape(shape)[1], int):
         return None, None
     return score, shape
 
 
 def context_of(softmax, shape, shapes, single_consumer):
-    """The `MatMul` weighting the values, reached past the exporter's no-op Reshape."""
     after = single_consumer(softmax.output[0])
     reshape = None
     if after is not None and after.op_type == "Reshape":
@@ -203,8 +169,6 @@ def rewrite(model, attentions, block):
                 axis=1,
             )
         )
-        # The blocked chain reads only tensors the context `MatMul` already
-        # depended on, so emitting it in that node's slot stays topological.
         replacements[id(attention.context)] = nodes
 
     dropped = set()
@@ -223,7 +187,6 @@ def rewrite(model, attentions, block):
 
 
 def prune(graph):
-    """Drop nodes, initializers and value_info left unreachable by the rewrite."""
     used = {out.name for out in graph.output}
     while True:
         live = []
@@ -249,8 +212,6 @@ def apply(model, query_block=QUERY_BLOCK):
     found = find_attentions(model)
     if not found:
         raise SystemExit("no MatMul/Softmax/MatMul attention chain in the graph")
-    # Chains already inside the block are left alone, so a second run over an
-    # already-blocked graph is a no-op instead of nesting more `Concat`s.
     attentions = [a for a in found if a.queries > query_block]
     if not attentions:
         print(

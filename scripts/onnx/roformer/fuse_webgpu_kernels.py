@@ -1,24 +1,4 @@
 # ruff: noqa: T201
-"""Rewrite node chains of the Duality core into kernels onnxruntime-web runs at once.
-
-The exported core spells several operations as chains of nodes, and on WebGPU every
-node of a chain is a dispatch over the whole tensor:
-
-- GELU as Div, Erf, Add, Mul and Mul over the feed-forward's hidden layer;
-- the interleaved rotary embedding as Mul, two Slices, Neg, Concat, Mul and Add over
-  the queries and the keys;
-- the projection to heads as a MatMul and a Transpose that moves the head axis ahead
-  of the sequence;
-- the query scale of the time attentions as a Slice and a Mul per block of query rows.
-
-This rewrites them into one Gelu, one RotaryEmbedding, one MatMul batched over the
-heads (its weight reshaped from the stored one, which onnxruntime folds at load) and
-one Mul ahead of a Split. The weights and their file stay; only the .onnx changes.
-
-Usage:
-    uv run python scripts/onnx/roformer/fuse_webgpu_kernels.py \
-        --model published/duality_core_t1100.onnx --out out/duality_core_t1100.onnx
-"""
 
 import argparse
 from dataclasses import dataclass, field
@@ -35,8 +15,6 @@ HEAD_SPLIT_RANK = 5
 QUERY_RANK = 4
 QUERY_AXIS = 2
 SLICE_STEPS = 4
-# A Split touches its input and every output: at most 8 outputs keep it within 9
-# storage buffers, under the 10 Dawn allows on Metal (see split_concat_webgpu.py).
 SPLIT_GROUP = 8
 
 
@@ -65,8 +43,6 @@ class Graph:
     count: int = 0
 
     def __post_init__(self) -> None:
-        # Every rewrite keeps the names of the tensors it reads and writes, so the
-        # shapes of the source graph stay valid for all passes.
         inferred = shape_inference.infer_shapes(self.model).graph
         self.shapes = {
             value.name: [dim.dim_value for dim in value.type.tensor_type.shape.dim]
@@ -96,7 +72,6 @@ class Graph:
         return self.constant(np.array(values, dtype=np.int64), hint)
 
     def value(self, name: str) -> np.ndarray | None:
-        """An initializer's values; external ones are read without attaching them."""
         init = self.initializers.get(name)
         if init is None:
             return None
@@ -110,25 +85,18 @@ class Graph:
         return np.frombuffer(raw, dtype=dtype).reshape(list(init.dims))
 
     def only(self, name: str, op: str) -> onnx.NodeProto | None:
-        """The `op` that writes `name`, when nothing else reads `name`."""
         node = self.producer.get(name)
         if node is None or node.op_type != op or len(self.consumers.get(name, [])) != 1:
             return None
         return node
 
     def sole(self, name: str, op: str) -> onnx.NodeProto | None:
-        """The one node that reads `name`, when it is an `op`."""
         readers = self.consumers.get(name, [])
         if len(readers) != 1 or readers[0].op_type != op:
             return None
         return readers[0]
 
     def apply(self, edits: list[Edit]) -> int:
-        """Put each edit's nodes where its anchor is and drop the nodes it removes.
-
-        Edits are collected on one unchanged graph and applied in one rebuild: the
-        rebuild copies every node, so references taken before it go stale.
-        """
         graph = self.model.graph
         at = {id(edit.anchor): edit.nodes for edit in edits}
         gone = {id(node) for edit in edits for node in edit.removed}
@@ -165,7 +133,6 @@ def constant_input(graph: Graph, node: onnx.NodeProto, expected: float) -> str |
 
 
 def fuse_gelu(graph: Graph) -> int:
-    """x * (0.5 * (erf(x / sqrt(2)) + 1)) -> Gelu(x)."""
     edits = []
     for outer in [node for node in graph.model.graph.node if node.op_type == "Mul"]:
         for x in outer.input:
@@ -188,7 +155,6 @@ def fuse_gelu(graph: Graph) -> int:
 
 
 def rotated_pairs(graph: Graph, flat: str) -> tuple[str, list[onnx.NodeProto]] | None:
-    """Match Reshape(Concat(-x1, x0)) over the pairs (x0, x1) of a Reshape of x."""
     flatten = graph.only(flat, "Reshape")
     stack = flatten and graph.only(flatten.input[0], "Concat")
     if not stack or len(stack.input) != PAIR:
@@ -212,7 +178,6 @@ def rotated_pairs(graph: Graph, flat: str) -> tuple[str, list[onnx.NodeProto]] |
 
 
 def rotary_chain(graph: Graph, add: onnx.NodeProto) -> dict | None:
-    """Match x * cos + rotate_pairs(x) * sin, rotate_pairs(x0, x1) = (-x1, x0)."""
     for straight_name in add.input:
         straight = graph.only(straight_name, "Mul")
         rotated = graph.only(other(add, straight_name), "Mul")
@@ -248,7 +213,6 @@ def fuse_rotary(graph: Graph) -> int:
                 message = f"{table}: the table does not repeat each angle for a pair"
                 raise ValueError(message)
             if table not in halves:
-                # Every other column: each pair's angle once, as the kernel takes it.
                 halves[table] = graph.name(f"half_{table}")
                 bounds = [graph.indices(v, "index") for v in ([0], [head], [1], [2])]
                 nodes.append(
@@ -276,7 +240,6 @@ def fuse_rotary(graph: Graph) -> int:
 
 
 def fuse_heads(graph: Graph) -> int:
-    """MatMul(x, W^T) to [1, a, s, h, d], then heads first -> MatMul batched over h."""
     edits = []
     for matmul in [node for node in graph.model.graph.node if node.op_type == "MatMul"]:
         weight_t = graph.producer.get(matmul.input[1])
@@ -326,7 +289,6 @@ def fuse_heads(graph: Graph) -> int:
 def split_tree(
     graph: Graph, source: str, blocks: list[tuple[int, str]]
 ) -> list[onnx.NodeProto]:
-    """Split `source` on the query axis into `blocks` of (rows, name), 8 wide."""
     if len(blocks) <= SPLIT_GROUP:
         sizes = graph.indices([rows for rows, _ in blocks], "sizes")
         outputs = [name for _, name in blocks]
@@ -357,7 +319,6 @@ def split_tree(
 def query_blocks(
     graph: Graph, name: str
 ) -> list[tuple[int, int, onnx.NodeProto, onnx.NodeProto]] | None:
-    """The blocks a time attention cuts from its queries: (start, end, Slice, Mul)."""
     blocks = []
     for node in graph.consumers.get(name, []):
         if node.op_type != "Slice":
@@ -382,7 +343,6 @@ def query_blocks(
 
 
 def fuse_query_scale(graph: Graph) -> int:
-    """A Slice and a Mul(scale) per block of query rows -> one Mul, one Split."""
     edits = []
     order = {id(node): index for index, node in enumerate(graph.model.graph.node)}
     for name in list(graph.consumers):

@@ -1,29 +1,4 @@
 # ruff: noqa: T201
-"""Fold the time axis of UVR-MDX-NET KARA2 into bands carried in the batch axis.
-
-It keeps the layout Transposes onnxruntime-web puts around its NHWC kernels off
-a batch of one (musetric/musetric#954).
-
-This rewrite keeps every operator of the original graph and holds each tensor
-of the U-Net body, [1, C, T, F] in the source, as [B, C, T / B, F]: B
-consecutive bands of time frames, one per batch item. Only a 3x3 convolution
-mixes neighbouring frames; it gets its halo rows from the neighbouring bands
-(zeros at the ends of the plane) and runs with no padding along time. The 2x2
-strided convolutions and transposed convolutions pair frames inside a band, the
-frequency-axis MatMuls, BatchNormalization, Relu, Add and Mul act per frame, so
-they run on the bands unchanged.
-
-The 1x1 input convolution and its Relu move after the source's first Transpose
-(a 1x1 convolution commutes with it). The 1x1 output convolution runs as a
-MatMul on the bands, and a rank-3 Reshape follows it before the bands are joined
-back into time.
-
-The graph keeps the source's input and output, pinned to batch 1.
-
-Usage:
-    uv run python scripts/onnx/kara2/fold_time_bands.py \
-        --model UVR_MDXNET_KARA_2.onnx --out kara2.onnx --bands 4 --check
-"""
 
 import argparse
 from dataclasses import dataclass, field

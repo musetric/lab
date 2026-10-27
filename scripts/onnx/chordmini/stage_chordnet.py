@@ -1,21 +1,3 @@
-"""Stage the ChordNet/CQT artifact bundle for publishing.
-
-The artifact is the WebGPU-oriented ChordNet classifier plus the exact CQT plan
-it was built to consume:
-
-* ``chordnet.onnx`` and ``config.json`` from ``export_chordnet.py``;
-* a binary CQT plan; and
-* its JSON provenance manifest.
-
-Every source is explicit so staging cannot silently combine a model with a plan
-from another export.  The staged names are stable for publishing:
-
-    uv run python scripts/onnx/chordmini/stage_chordnet.py \
-      --chordnet-export <chordnet-export-dir> \
-      --cqt-plan <plan.bin> --cqt-plan-manifest <plan.json> \
-      --dest ../models/chordmini-onnx
-"""
-
 # ruff: noqa: T201
 
 import argparse
@@ -36,19 +18,16 @@ PUBLISH_FILES = [
 
 
 def _require_directory(path: Path, option: str) -> None:
-    """Exit with an option-specific message unless path is a directory."""
     if not path.is_dir():
         raise SystemExit(f"{option} is not a directory: {path}")
 
 
 def _require_file(path: Path, option: str) -> None:
-    """Exit with an option-specific message unless path is a regular file."""
     if not path.is_file():
         raise SystemExit(f"{option} is not a file: {path}")
 
 
 def _require_export_files(export: Path, files: list[str]) -> None:
-    """Check that an ONNX export directory contains its complete file set."""
     missing = [rel for rel in files if not (export / rel).is_file()]
     if missing:
         listing = "\n  ".join(missing)
@@ -56,7 +35,6 @@ def _require_export_files(export: Path, files: list[str]) -> None:
 
 
 def _copy(source: Path, target: Path) -> None:
-    """Copy a binary file verbatim and normalize JSON line endings."""
     target.parent.mkdir(parents=True, exist_ok=True)
     if target.suffix == ".json":
         target.write_bytes(source.read_bytes().replace(b"\r\n", b"\n"))
@@ -66,7 +44,6 @@ def _copy(source: Path, target: Path) -> None:
 
 
 def main() -> None:
-    """Copy the classifier and its plan under the published artifact names."""
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--chordnet-export",

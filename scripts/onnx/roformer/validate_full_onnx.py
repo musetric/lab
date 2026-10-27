@@ -1,11 +1,3 @@
-"""Reference generator for the full-graph validation.
-
-Takes the loudest window of --frames frames from a track, runs the torch
-FullSeparator on it, and writes the input chunk + reference vocals as raw
-little-endian f32, planar stereo. This repository carries no comparator that
-scores an execution provider against them.
-"""
-
 # ruff: noqa: T201, N806
 
 import argparse
@@ -21,7 +13,6 @@ from musetric_toolkit.separate_audio.roformer.attend import Attend
 
 
 def loudest_window(mix: np.ndarray, length: int) -> int:
-    """Offset of the highest-energy window of `length` samples."""
     power = (mix**2).mean(axis=0)
     total = np.concatenate(([0.0], np.cumsum(power, dtype=np.float64)))
     return int(np.argmax(total[length:] - total[:-length]))
@@ -49,7 +40,6 @@ def main() -> None:
     args = p.parse_args()
     args.out_dir.mkdir(parents=True, exist_ok=True)
 
-    # the DSP functions read these module globals at call time
     bfo.T = args.frames
     bfo.TSAMP = bfo.HOP * (args.frames - 1)
     PACKED, T, TSAMP = bfo.PACKED, bfo.T, bfo.TSAMP
@@ -57,22 +47,21 @@ def main() -> None:
 
     mix = utils.normalize(
         read_audio_file(str(args.source), 44100, 2), max_peak=0.9, min_peak=0.0
-    )  # [2, samples]
+    )
     start = loudest_window(mix, TSAMP)
     chunk = np.ascontiguousarray(mix[:, start : start + TSAMP], dtype=np.float32)
-    x = torch.from_numpy(chunk).unsqueeze(0).to(dev)  # [1,2,TSAMP]
+    x = torch.from_numpy(chunk).unsqueeze(0).to(dev)
     print(f"window at {start / 44100:.1f}s ({start} samples)")
 
     model = bfo.load_model(args.checkpoint, args.config)
     if dev.type == "cuda":
-        # use flash SDPA so the T² sim is never materialized (fits 6 GB)
         for m in model.modules():
             if isinstance(m, Attend):
                 m.flash = True
     full = bfo.FullSeparator(model).to(dev).eval()
     with torch.no_grad():
-        full.model.net_forward(torch.randn(1, PACKED, T, 2, device=dev))  # warm rotary
-        vocals = full(x)[0].float().cpu().numpy().astype(np.float32)  # [2, TSAMP]
+        full.model.net_forward(torch.randn(1, PACKED, T, 2, device=dev))
+        vocals = full(x)[0].float().cpu().numpy().astype(np.float32)
 
     chunk.tofile(args.out_dir / "full_input.f32")
     vocals.tofile(args.out_dir / "full_ref_vocals.f32")

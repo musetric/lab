@@ -26,12 +26,6 @@ from musetric_toolkit.separate_audio.roformer_utils import (
     dict_to_namespace,
 )
 
-# The vocals half of the separation step: the product feeds the core the STFT of
-# an 1100-frame chunk (packages/server/src/analysis/models.rs VOCALS_GEOMETRY),
-# multiplies the spectrum by the masks it returns and folds the chunks with the
-# host's Hamming weights. The original is the student distilled from Aname
-# Duality, its published weights in torch.
-
 SAMPLE_RATE = 44100
 CHANNELS = 2
 N_FFT = 2048
@@ -53,7 +47,6 @@ def load_student(models_path: Path, device: torch.device):
 
 
 def pack(spectrum: np.ndarray) -> np.ndarray:
-    """[channels, frames, bins] -> stft_repr [1, bins * channels, frames, 2]."""
     channels, frames, bins = spectrum.shape
     packed = np.zeros((1, bins * channels, frames, 2))
     for channel in range(channels):
@@ -74,7 +67,6 @@ def apply_masks(spectrum: np.ndarray, masks: np.ndarray) -> np.ndarray:
 
 
 def torch_masks(model: PooledMelBandRoformer, stft_repr: np.ndarray) -> np.ndarray:
-    """The per-bin masks of the original forward: band masks scattered and averaged."""
     device = next(model.parameters()).device
     with torch.inference_mode():
         tensor = torch.from_numpy(stft_repr.astype(np.float32)).to(device)
@@ -102,8 +94,6 @@ def onnx_masks(onnx_path: Path, stft_repr: np.ndarray) -> np.ndarray:
 def author_demix(
     model: PooledMelBandRoformer, config, mixture: np.ndarray
 ) -> np.ndarray:
-    """Vocals by the model's published inference: the lab's separator, 11 s
-    windows every 8 s with Hamming weights, in fp32."""
     device = next(model.parameters()).device
     sources = AudioProcessor(device, config).demix(mixture.astype(np.float32), model)
     return sources[config.training.target_instrument].astype(np.float64)

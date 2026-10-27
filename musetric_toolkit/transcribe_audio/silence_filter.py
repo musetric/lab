@@ -1,7 +1,5 @@
 import numpy as np
 
-# A segment is dropped when its RMS is below this share of the median segment
-# RMS.
 SILENCE_RMS_RATIO = 0.2
 
 

@@ -1,17 +1,3 @@
-"""Make the merged Whisper decoder compute correctly on mobile GPUs.
-
-`pad_attention_scores` keeps the decoder's attention score products off the
-packed vec4 WebGPU `MatMul` kernel that Adreno 600-series adapters get wrong
-(musetric/musetric#886).
-
-The rewrite applies to both merged decoders, float16 and q4, and is idempotent.
-`stage_whisper.py` runs the same check before it stages a decoder.
-
-    uv run python scripts/onnx/whisper/mobile_decoder.py \
-      --input  decoder_model_merged_fp16.onnx \
-      --output decoder_model_merged_fp16.onnx
-"""
-
 # ruff: noqa: T201
 
 import argparse
@@ -27,7 +13,6 @@ with contextlib.suppress(Exception):
 
 
 def verify(model):
-    """Report what would still compute wrong on a mobile GPU, as a list of reasons."""
     scores = pad_attention_scores.count_affected(model)
     if scores:
         return [

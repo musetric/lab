@@ -1,15 +1,4 @@
 # ruff: noqa: T201
-"""Capture real runtime shapes of every intermediate of a dynamic ONNX graph.
-
-Runs the model once in ORT CPU with every intermediate exposed as an output
-and records the observed tensor shapes. ONNX shape inference cannot resolve
-the shapes of graphs whose Reshape nodes read `Shape` outputs at runtime, so
-this forward pass is the reliable source for static rewrites.
-
-Usage:
-    uv run python capture_shapes.py --model beat_this.onnx --frames 1500 \
-        --out shapes1500.json [--probe probe_all.onnx]
-"""
 
 import argparse
 import json

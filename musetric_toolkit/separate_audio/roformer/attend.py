@@ -1,8 +1,3 @@
-# Based on BS-RoFormer implementation by Phil Wang (lucidrains)
-# Original: https://github.com/lucidrains/BS-RoFormer
-# License: MIT
-# Modified for Musetric project
-
 import logging
 import math
 import warnings
@@ -16,10 +11,6 @@ _backends_logged = {"value": False}
 
 
 def row_chunks(batch: int, rows_per_batch: int, row_limit: int) -> int:
-    """Fewest equal chunks of the batch axis that keep every chunk <= row_limit rows.
-
-    Counts chunks the way torch.chunk cuts them, ceil(batch / parts) per chunk.
-    """
     if rows_per_batch > row_limit:
         raise ValueError(
             f"one batch row already spans {rows_per_batch} rows, past {row_limit}"
@@ -62,7 +53,6 @@ class Attend(nn.Module):
         self.dropout = dropout
         self.attn_dropout = nn.Dropout(dropout)
         self.flash = flash
-        # 0 = off. Export-only knobs; see the matmul path in forward().
         self.q_block = 0
         self.softmax_rows = 0
 
@@ -86,12 +76,8 @@ class Attend(nn.Module):
         if not _backends_logged["value"]:
             logging.debug("Using manual attention computation (matmul-based)")
             _backends_logged["value"] = True
-        # MatMul in place of the upstream einsum, with the same values:
-        # sim = q @ k^T ; out = attn @ v.
         scale = q.shape[-1] ** -0.5
 
-        # q_block splits the query axis into blocks; exact, since softmax
-        # normalizes each query row over the full key axis on its own.
         if self.q_block and q.shape[-2] > self.q_block:
             outputs = []
             for start in range(0, q.shape[-2], self.q_block):
@@ -106,8 +92,6 @@ class Attend(nn.Module):
         return torch.matmul(attn, v)
 
     def softmax(self, sim):
-        # softmax_rows splits the score tensor over its batch axis so that no
-        # softmax sees more rows than that. Exact: every row normalizes on its own.
         if self.softmax_rows:
             rows_per_batch = math.prod(sim.shape[1:-1])
             parts = row_chunks(sim.shape[0], rows_per_batch, self.softmax_rows)

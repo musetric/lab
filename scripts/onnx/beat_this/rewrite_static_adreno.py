@@ -1,28 +1,4 @@
 # ruff: noqa: T201
-"""Static rewrite of beat_this that avoids the Adreno 6xx broken WebGPU kernels.
-
-- Transpose families that select the broken shared-tile kernel
-  ((0,2,1), (0,1,3,2), (0,3,1,2), (0,3,2,1), (2,0,1)) become
-  Reshape(1D) -> Gather(const int32 idx) -> Reshape(target).
-  Rank-5 (2,0,3,1,4) head-split transposes and rank-4 (0,2,1,3) are kept.
-- Conv becomes Pad + Reshape + Gather(im2col idx) + MatMul(reshaped weights,
-  bias added back).
-- Inference BatchNormalization becomes Mul + Add (folded running stats).
-
-Ship the rewrite pinned at the author's 1500 frames, then split the attention
-with split_attention_webgpu.py. The rewrite itself is the same at any frame
-count; only the index tables grow with it.
-
-Tensor shapes come from `capture_shapes.py` because ONNX shape inference
-cannot resolve runtime-computed Reshape shapes.
-
-Usage:
-    uv run python capture_shapes.py --model beat_this.onnx --frames 1500 \
-        --out shapes1500.json
-    uv run python rewrite_static_adreno.py --model beat_this.onnx \
-        --out beat_this.onnx --shapes shapes1500.json \
-        [--no-conv] [--no-transpose] [--no-bn]
-"""
 
 import argparse
 import json

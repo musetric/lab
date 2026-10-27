@@ -38,16 +38,11 @@ musetric-parity = "musetric_toolkit.parity_audio.main_cli:main_cli"
 musetric-rhythm-bench = "musetric_toolkit.rhythm_bench.main_cli:main_cli"
 
 [tool.uv]
-# The uv of every machine and of CI: setup-uv in CI reads this pin too.
 required-version = "==0.13.5"
-# CUDA-only: the torch stack comes from the CUDA 12.9 PyTorch index and the lock
-# covers Linux and Windows on x86_64 only; torchcodec stays on PyPI.
 environments = [
     "sys_platform == 'linux' and platform_machine == 'x86_64'",
     "sys_platform == 'win32' and platform_machine == 'AMD64'",
 ]
-# Only onnxruntime-gpu is installed: faster-whisper's dependency on the CPU
-# `onnxruntime` package is overridden with a never-matching marker.
 override-dependencies = ["onnxruntime; sys_platform == 'no-such-platform'"]
 
 [[tool.uv.index]]
@@ -91,8 +86,6 @@ exclude = "(.venv|tmp/|musetric_toolkit/chords_audio/chordmini|musetric_toolkit/
 
 [tool.isort]
 profile = "black"
-# Skip gitignored paths (scratch dirs, build output) so isort matches the file
-# set ruff and black already lint by default.
 skip_gitignore = true
 skip = [
     ".venv",
@@ -101,9 +94,6 @@ skip = [
     "musetric_toolkit/pitch_audio/rmvpe",
     "scripts/onnx/whisper/extra",
 ]
-# isort's `skip` doesn't match single-file relative paths when running `isort .`,
-# so skip the vendored converter files by glob instead
-# (see scripts/onnx/whisper/readme.md).
 skip_glob = [
     "*/onnx/whisper/convert.py",
     "*/onnx/whisper/quantize.py",
@@ -115,7 +105,6 @@ exclude = [
     "musetric_toolkit/chords_audio/chordmini",
     "musetric_toolkit/key_audio/skey",
     "musetric_toolkit/pitch_audio/rmvpe",
-    # Vendored transformers.js converter (see scripts/onnx/whisper/readme.md).
     "scripts/onnx/whisper/convert.py",
     "scripts/onnx/whisper/quantize.py",
     "scripts/onnx/whisper/extra",

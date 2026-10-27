@@ -4,12 +4,6 @@ from pathlib import Path
 
 import numpy as np
 
-# A variant is one way of getting the clicks of a track: an input, a window and
-# a postprocessing of Beat This!, or the app's own result. Each lives in the
-# results directory as <track>/<variant>.json with its beats and downbeats in
-# seconds; the logits it came from, when there are any, sit next to it as
-# <track>/<logits>-beat.npy and <track>/<logits>-downbeat.npy.
-
 
 @dataclass
 class Variant:

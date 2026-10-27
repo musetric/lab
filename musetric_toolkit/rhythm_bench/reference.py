@@ -11,11 +11,6 @@ from musetric_toolkit.rhythm_bench.postprocess import (
 from musetric_toolkit.rhythm_bench.track_files import track_files
 from musetric_toolkit.rhythm_bench.variant import variant_path
 
-# Beat This! "final0" in torch, the reference the rhythm step of the app
-# matches (musetric/musetric#1031). The track is cut into windows of the given
-# number of frames with a border of 6, and where windows overlap the first
-# window's frames are kept, as the author's inference does: 1500 frames is the
-# author's window and the app's.
 BORDER_SIZE = 6
 
 

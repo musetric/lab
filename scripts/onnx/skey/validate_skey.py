@@ -1,15 +1,3 @@
-"""Validate the exported S-KEY ONNX against the torch run_skey pipeline.
-
-For each audio file in --audio it compares the predicted key index (and
-confidence) from:
-  * the reference pipeline (unpatched VQT + ChromaNet, exactly run_skey),
-  * the exported ONNX graph, run under onnxruntime.
-
-    uv run --group export python scripts/onnx/skey/validate_skey.py \
-      --onnx <export-dir>/skey.onnx --audio <audio-dir> \
-      --models-path <checkpoint-cache-dir>
-"""
-
 # ruff: noqa: T201
 
 import argparse

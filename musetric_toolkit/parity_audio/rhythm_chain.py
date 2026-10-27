@@ -7,15 +7,6 @@ from musetric_toolkit.parity_audio.case_writer import CaseWriter
 from musetric_toolkit.parity_audio.host_audio import MEAN, read_mono
 from musetric_toolkit.rhythm_audio.bpm_estimator import summarize_rhythm
 
-# The rhythm step: the host sends the whole track, the mean of the channels at
-# 22050 Hz; the product builds the log-mel spectrogram, feeds it in windows of
-# 1500 frames with a border of 6 (packages/server/src/analysis/models.rs
-# beat_this_graph), keeps the first window's frames where windows overlap,
-# tracks the beats with the dynamic Bayesian network of the Beat This! "dbn"
-# postprocessing and summarizes the tempo. The original is Beat This! "final0"
-# in torch with its own features and the same "dbn" postprocessing, in windows
-# of the same 1500 frames.
-
 SAMPLE_RATE = 22050
 FPS = 50
 CHUNK_SIZE = 1500

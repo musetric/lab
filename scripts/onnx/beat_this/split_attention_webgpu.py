@@ -1,20 +1,4 @@
 # ruff: noqa: T201
-"""Split beat_this's attention into head groups that fit one WebGPU storage binding.
-
-Every attention core in the graph is MatMul(q, k^T) -> Softmax -> MatMul(., v), and
-the scores between the two MatMuls are a single [b, h, frames, frames] tensor, too
-large for one WebGPU storage binding on the phones at 1500 frames
-(musetric/musetric#1029).
-
-Heads are independent, so the core is cut along the head axes (the first one longer
-than 1) into equal groups whose scores stay within --budget-mib, each group runs its
-own MatMul -> Softmax -> MatMul, and Concat restores the original output tensor.
-Slices are static Slice nodes, not Split. The arithmetic of every output element is
-unchanged.
-
-    uv run --group export python scripts/onnx/beat_this/split_attention_webgpu.py \
-      --model <in.onnx> --shapes shapes1500.json --out <out.onnx> [--budget-mib 72]
-"""
 
 from __future__ import annotations
 

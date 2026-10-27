@@ -1,29 +1,3 @@
-"""Replace the one Transpose shape Adreno 600-series adapters get wrong with a Gather.
-
-The affected shape is, after leading extents of one are squeezed away, a rank-2
-permutation that swaps both axes (musetric/musetric#975). In this graph that is
-one node - a rank-3 tensor with a leading one whose last two axes swap.
-
-`Gather` against a precomputed index table returns the same permutation exactly
-on the same device, so this rewrites
-
-    y = Transpose(x, perm=[0, 2, 1])          x: [1, C, T]
-
-into
-
-    y = Reshape(Gather(Reshape(x, [-1]), idx), [1, T, C])
-
-with `idx[t * C + c] = c * T + t`. The values are untouched; the cost is one
-int32 index per element of the tensor.
-
-The table is static, so the rewrite pins the extents it was built for: run it on
-a graph whose shapes are already fixed.
-
-    uv run python scripts/onnx/whisper/transpose_to_gather.py \
-      --input  tmp/whisper-export/.../onnx/encoder_model_q4.onnx \
-      --output tmp/whisper-export/.../onnx/encoder_model_q4.onnx
-"""
-
 # ruff: noqa: T201
 
 import argparse
@@ -40,12 +14,10 @@ with contextlib.suppress(Exception):
     sys.stdout.reconfigure(encoding="utf-8")
 
 BATCH_NAMES = {"batch_size", "batch", "N"}
-# The broken form is rank three with a leading extent of one.
 BROKEN_RANK = 3
 
 
 def static_shape(value_info, batch):
-    """Dimensions with the symbolic batch resolved, or None if anything else is free."""
     dims = []
     for dim in value_info.type.tensor_type.shape.dim:
         if dim.HasField("dim_value"):
@@ -58,7 +30,6 @@ def static_shape(value_info, batch):
 
 
 def affected(node, shapes, batch):
-    """The rank-3, leading-one, last-two-axis swap - the only broken form."""
     perm = next((list(a.ints) for a in node.attribute if a.name == "perm"), None)
     if perm != [0, 2, 1]:
         return None
@@ -75,7 +46,6 @@ def rewrite(graph, node, dims, known):
     _, channels, frames = dims
     prefix = (node.name or "transpose").replace("/", "_").strip("_")
 
-    # out[t * channels + c] reads in[c * frames + t]
     index = (
         np.arange(channels, dtype=np.int32)[None, :] * frames
         + np.arange(frames, dtype=np.int32)[:, None]
@@ -140,8 +110,6 @@ def apply(model, batch=1):
     known = {init.name for init in graph.initializer}
     total = sum(1 for node in graph.node if node.op_type == "Transpose")
 
-    # Keyed by position: a protobuf wrapper's id() is recycled, so matching on
-    # it silently replaces unrelated nodes.
     replacements = {}
     indices = 0
     for position, node in enumerate(graph.node):

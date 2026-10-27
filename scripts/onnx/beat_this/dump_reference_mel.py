@@ -1,18 +1,3 @@
-"""Dump reference log-mel spectrograms for the WebGPU front end's parity gate.
-
-The Beat This! export leaves feature extraction out of the ONNX graph: the
-runtime computes the log-mel on WebGPU. This writes the torch reference's own
-answer so that side can be diffed against it.
-
-For each audio file in --audio it writes, into --out:
-  * `<stem>.pcm`   -- the decoded mono waveform, float32 (the shader's input),
-  * `<stem>.mel`   -- `LogMelSpect` of that waveform, float32 [frames, mels],
-  * `<stem>.json`  -- frame/mel counts.
-
-    uv run python scripts/onnx/beat_this/dump_reference_mel.py \
-      --audio <audio-dir> --out <dump-dir> --models-path <checkpoint-cache-dir>
-"""
-
 # ruff: noqa: T201
 
 import argparse
@@ -33,7 +18,6 @@ STEREO_NDIM = 2
 
 
 def load_mono(path: Path) -> np.ndarray:
-    """Load a track the way the reference Audio2Frames does."""
     import soxr  # noqa: PLC0415
     from beat_this.preprocessing import load_audio  # noqa: PLC0415
 
@@ -46,7 +30,6 @@ def load_mono(path: Path) -> np.ndarray:
 
 
 def main() -> None:
-    """Write reference waveforms and their log-mel spectrograms."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--audio", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)

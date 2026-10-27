@@ -7,10 +7,6 @@ import torch
 from musetric_toolkit.common.logger import send_message
 from musetric_toolkit.separate_audio import utils
 
-# Host demix / post-processing flow for BS-RoFormer-compatible checkpoints.
-# Integration patterns were validated against python-audio-separator (MIT).
-# See thirdPartyNotices.md for attribution.
-
 
 def dict_to_namespace(data: Any) -> Any:
     if isinstance(data, dict):

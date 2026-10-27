@@ -1,24 +1,4 @@
 # ruff: noqa: T201
-"""Point a rebuilt core at the weights file of a published revision.
-
-A re-export with the same weights lays them out in another order, so its
-`.onnx.data` differs byte for byte even when every tensor is the same, and an
-app that pins the new revision downloads the whole weights file again. This
-rewrites every external-data reference of the new graph to the offset of the
-same bytes in the published weights file, and refuses when any tensor is not
-found there. Only the `.onnx` of the new revision then changes.
-
-A weight that a `Transpose` turns into the matrix the published graph stores is
-folded first: the node goes and its output reads the published matrix. The
-exporter folds such a transpose on its own while the transposed weight has one
-consumer; row-chunked projections give it several, and then it stays a node.
-
-Usage:
-    uv run python scripts/onnx/roformer/reuse_external_data.py \
-        --model new/duality_core_t1100.onnx \
-        --reference published/duality_core_t1100.onnx \
-        --out out/duality_core_t1100.onnx
-"""
 
 import argparse
 import hashlib
@@ -67,7 +47,6 @@ def point(tensor: onnx.TensorProto, found: tuple[str, int, int]) -> None:
 def fold_transposes(
     model: onnx.ModelProto, directory: Path, offsets: dict[str, tuple[str, int, int]]
 ) -> set[str]:
-    """Replace Transpose(weight) by the published transposed weight."""
     graph = model.graph
     tensors = {tensor.name: tensor for tensor in graph.initializer}
     folded: set[str] = set()

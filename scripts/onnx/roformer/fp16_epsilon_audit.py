@@ -1,22 +1,3 @@
-"""Audit exported ONNX graphs for normalization epsilons that fp16 cannot carry.
-
-1. A fused normalization (RMSNormalization, LayerNormalization, ...) on an fp16
-   node casts the reciprocal 1/sqrt(var + epsilon) to fp16, so its epsilon must
-   stay above 1/65504^2 = 2.33e-10.
-
-2. A decomposed normalization (ReduceMean -> Add(eps) -> Sqrt -> Div) that keeps
-   its epsilon as an fp16 initializer below the smallest normal fp16 value,
-   6.10e-5, reads it as zero on a GPU that flushes denormals.
-
-The rule this enforces is (1). (2) is reported as a warning: it only fires on a
-flushing device and only for a row whose variance is exactly zero. Neither bounds
-how large an epsilon may be.
-
-Usage:
-  uv run python scripts/onnx/roformer/fp16_epsilon_audit.py model.onnx [more.onnx ...]
-  uv run python scripts/onnx/roformer/fp16_epsilon_audit.py --weights model.onnx
-"""
-
 # ruff: noqa: T201 -- CLI audit tool: stdout is its interface.
 
 import argparse
@@ -28,16 +9,11 @@ import onnx
 from onnx import numpy_helper
 
 FP16_MAX = 65504.0
-# below this an fp16 1/sqrt(var + epsilon) overflows to +inf for a zero row
 FP16_RSQRT_FLOOR = 1.0 / FP16_MAX**2
-# the floor is exact and data-independent, so this only covers f32 rounding
 FP16_RSQRT_MARGIN = 2.0 * FP16_RSQRT_FLOOR
-# smallest normal fp16; below it a denormal-flushing GPU reads the epsilon as 0
 FP16_MIN_NORMAL = 6.103515625e-05
-# an epsilon is never larger than this, so a bigger constant is something else
 EPSILON_CEILING = 1e-3
 
-# every op whose epsilon feeds a 1/sqrt(var + epsilon)
 EPSILON_OPS = frozenset(
     {
         "BatchNormalization",
@@ -51,7 +27,6 @@ EPSILON_OPS = frozenset(
         "SkipSimplifiedLayerNormalization",
     }
 )
-# the tail of a decomposed normalization, reached from the Add that holds the eps
 NORMALIZE_TAILS = frozenset({"Sqrt", "Reciprocal", "Pow", "Rsqrt"})
 
 
@@ -68,7 +43,6 @@ def parse_args() -> argparse.Namespace:
 
 
 def walk_graphs(graph):
-    """The graph and every subgraph an If/Loop/Scan attribute carries."""
     yield graph
     for node in graph.node:
         for attribute in node.attribute:
@@ -79,7 +53,6 @@ def walk_graphs(graph):
 
 
 def scalar_constants(graph) -> dict[str, tuple[float, int]]:
-    """Scalar float constants by name, from initializers and from Constant nodes."""
     tensors = [(t.name, t) for t in graph.initializer]
     for node in graph.node:
         if node.op_type == "Constant":
@@ -91,8 +64,6 @@ def scalar_constants(graph) -> dict[str, tuple[float, int]]:
     for name, tensor in tensors:
         if tensor.data_type not in (onnx.TensorProto.FLOAT, onnx.TensorProto.FLOAT16):
             continue
-        # an epsilon is always inline; skipping external data keeps the audit
-        # runnable without the weights file beside the graph
         if tensor.data_location == onnx.TensorProto.EXTERNAL:
             continue
         array = numpy_helper.to_array(tensor)
@@ -109,7 +80,6 @@ def tensor_dtypes(graph) -> dict[str, int]:
 
 
 def fused_epsilons(graph) -> list[tuple[str, int, float]]:
-    """(label, dtype, epsilon) for every fused normalization in one graph."""
     dtypes = tensor_dtypes(graph)
     found = []
     for node in graph.node:
@@ -129,11 +99,6 @@ def fused_epsilons(graph) -> list[tuple[str, int, float]]:
 def decomposed_epsilons(
     graph, constants: dict[str, tuple[float, int]]
 ) -> list[tuple[str, int, float]]:
-    """Same, for the ReduceMean -> Add(eps) -> Sqrt/Reciprocal form.
-
-    `constants` spans every graph in the file, because a subgraph reads the outer
-    scope: an If branch normalizes with an epsilon held by the parent graph.
-    """
     consumers: dict[str, list] = {}
     for node in graph.node:
         for name in node.input:
@@ -165,8 +130,6 @@ def report(counted: dict[tuple[str, int, float], int]) -> tuple[int, int]:
         if dtype != onnx.TensorProto.FLOAT16:
             print(f"  ok    {head}")
         elif label in EPSILON_OPS:
-            # a fused op keeps its epsilon in an f32 uniform, so only the
-            # reciprocal it produces has to stay inside fp16
             if epsilon < FP16_RSQRT_FLOOR:
                 failures += count
                 print(f"  FAIL  {head} < {FP16_RSQRT_FLOOR:g}: a zero row becomes NaN")

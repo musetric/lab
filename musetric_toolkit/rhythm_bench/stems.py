@@ -3,12 +3,6 @@ import sys
 import librosa
 import numpy as np
 
-# Why a passage loses the beat: per window of 4 s, the level of the
-# instrumental, the voice and the percussive and harmonic parts of the
-# instrumental (HPSS), and the two strongest periods of their onsets between
-# 0.25 and 1.2 s. A passage where the percussive part falls silent and the
-# periods scatter is one without drums.
-
 SAMPLE_RATE = 22050
 HOP = 512
 WINDOW_SECONDS = 4

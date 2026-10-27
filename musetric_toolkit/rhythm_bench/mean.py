@@ -8,10 +8,6 @@ from musetric_toolkit.rhythm_bench.postprocess import (
 )
 from musetric_toolkit.rhythm_bench.variant import tracks_with, variant_path
 
-# The mean of the logits of two inputs of the same track, such as the
-# instrumental and the full mix, taken frame by frame over their common
-# length and postprocessed like any other variant.
-
 
 def main(args) -> None:
     results_dir = Path(args.results_dir)

@@ -1,23 +1,3 @@
-"""Export the Beat This! tracker as a spect-to-logits ONNX graph.
-
-The graph covers only the neural boundary the WebGPU pipeline needs:
-
-    beat_this.onnx  spect [W, F, 128] -> beat [W, F], downbeat [W, F]
-
-Feature extraction, chunking, aggregation and peak picking are not in the graph:
-the runtime computes the log-mel spectrogram on WebGPU (@musetric/fft STFT + the
-mel filterbank exported here) and does the rest itself.
-
-`mel-filterbank.bin` is torchaudio's own `MelScale.fb` written verbatim as
-row-major float32 [n_fft // 2 + 1, n_mels].
-
-`PartialFTTransformer.forward` is replaced at export time; the installed
-`beat_this` package is left untouched.
-
-    uv run --group export python scripts/onnx/beat_this/export_beat_this.py \
-      --out <export-dir> --models-path <checkpoint-cache-dir>
-"""
-
 # ruff: noqa: T201
 
 import argparse
@@ -49,7 +29,6 @@ WINDOW_TOLERANCE = 1e-6
 
 
 class DynamicPartialFTTransformer(nn.Module):
-    """PartialFTTransformer with a traced batch size instead of len(x)."""
 
     def __init__(self, source: nn.Module) -> None:
         super().__init__()
@@ -59,7 +38,6 @@ class DynamicPartialFTTransformer(nn.Module):
         self.ffT = source.ffT
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Attend across frequencies then across time, keeping the input shape."""
         _batch, channels, freqs, times = x.shape
         across_freqs = x.permute(0, 3, 2, 1).reshape(-1, freqs, channels)
         across_freqs = across_freqs + self.attnF(across_freqs)
@@ -73,26 +51,22 @@ class DynamicPartialFTTransformer(nn.Module):
 
 
 class BeatThisFrames(nn.Module):
-    """Framewise beat and downbeat logits for a batch of spectrogram windows."""
 
     def __init__(self, model: nn.Module) -> None:
         super().__init__()
         self.model = model
 
     def forward(self, spect: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """Return (beat, downbeat) logits for windows shaped [W, F, mels]."""
         prediction = self.model(spect)
         return prediction["beat"], prediction["downbeat"]
 
 
 def patch_for_export(model: nn.Module) -> None:
-    """Swap the frontend blocks whose forward freezes the window count."""
     for block in model.frontend.blocks:
         block.partial = DynamicPartialFTTransformer(block.partial)
 
 
 def check_analytic_window(window: torch.Tensor) -> None:
-    """Reject a reference window the runtime's analytic Hann cannot reproduce."""
     size = window.shape[0]
     offsets = torch.arange(size, dtype=torch.float64)
     analytic = 0.5 - 0.5 * torch.cos(2.0 * math.pi * offsets / size)
@@ -107,7 +81,6 @@ def check_analytic_window(window: torch.Tensor) -> None:
 
 
 class MelContract:
-    """Log-mel constants the runtime must reproduce outside the graph."""
 
     def __init__(self, reference: nn.Module) -> None:
         spectrogram = reference.spect_class.spectrogram
@@ -120,7 +93,6 @@ class MelContract:
 
 
 def build_modules(models_path: str) -> tuple[BeatThisFrames, MelContract]:
-    """Load the checkpoint and return the export-ready model and mel contract."""
     os.environ["TORCH_HOME"] = models_path
     from beat_this.inference import load_model  # noqa: PLC0415
     from beat_this.preprocessing import LogMelSpect  # noqa: PLC0415
@@ -134,7 +106,6 @@ def build_modules(models_path: str) -> tuple[BeatThisFrames, MelContract]:
 
 
 def export_model(model: BeatThisFrames, path: Path) -> None:
-    """Write the spectrogram-windows-to-logits graph."""
     dummy = torch.zeros(1, CHUNK_SIZE, MEL_BINS, dtype=torch.float32)
     torch.onnx.export(
         model,
@@ -153,7 +124,6 @@ def export_model(model: BeatThisFrames, path: Path) -> None:
 
 
 def write_filterbank(path: Path, mel: MelContract) -> None:
-    """Write torchaudio's mel filterbank as row-major float32."""
     filterbank = mel.filterbank.to(torch.float32).contiguous()
     path.write_bytes(filterbank.numpy().tobytes())
     rows, columns = filterbank.shape
@@ -161,7 +131,6 @@ def write_filterbank(path: Path, mel: MelContract) -> None:
 
 
 def write_config(path: Path, mel: MelContract) -> None:
-    """Write the artifact contract shared with the @musetric/ai runtime."""
     bins, mels = mel.filterbank.shape
     payload = {
         "modelType": "beat-this-final0",
@@ -212,7 +181,6 @@ def write_config(path: Path, mel: MelContract) -> None:
 
 
 def main() -> None:
-    """Export the graph, the mel filterbank and their contract."""
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--out",

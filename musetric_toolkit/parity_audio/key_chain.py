@@ -9,13 +9,6 @@ from musetric_toolkit.key_audio.skey_runner import run_skey
 from musetric_toolkit.parity_audio.case_writer import CaseWriter
 from musetric_toolkit.parity_audio.host_audio import POWER, read_mono
 
-# The key step: the host sends the whole track, mono at 22050 Hz from the power
-# downmix (L + R) / sqrt 2; the product scales it to a unit peak and runs the
-# self-contained S-KEY graph on the wasm provider, audio -> 24 key
-# probabilities (packages/ai/src/service/browserKey.ts). The original is the
-# S-KEY checkpoint in torch: its constant-Q front end, ChromaNet, the mean of
-# the frame logits and a softmax.
-
 SAMPLE_RATE = 22050
 
 

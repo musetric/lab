@@ -16,10 +16,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           persist-credentials: false
-      # uv at the version `required-version` in pyproject.toml pins; uv brings
-      # the Python `requires-python` pins.
       - uses: astral-sh/setup-uv@v10.3.2
-      # The standalone binary a developer has on PATH, at the monorepo's version.
       - name: Install editorconfig-checker
         env:
           EDITORCONFIG_CHECKER_VERSION: v4.0.1
@@ -27,13 +24,9 @@ jobs:
           mkdir -p "$RUNNER_TEMP/bin"
           curl -fsSL "https://github.com/editorconfig-checker/editorconfig-checker/releases/download/$EDITORCONFIG_CHECKER_VERSION/editorconfig-checker-linux-amd64.tar.gz" | tar -xz -C "$RUNNER_TEMP/bin" editorconfig-checker
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-      # Node at the version .node-version pins, for the npm tools of package.json
-      # (@musetric/checks).
       - uses: actions/setup-node@v5
         with:
           node-version-file: .node-version
           cache: npm
       - run: npm ci
-      # The check a developer runs; only the lint group is installed, not the
-      # project and its CUDA dependencies.
       - run: uv run --only-group check python scripts/check.py
