@@ -4,7 +4,18 @@ The lab of [Musetric](https://github.com/musetric/musetric): the reference of ev
 
 ## Installation
 
-Requires an NVIDIA GPU (CUDA 12.9) on Linux or Windows on x86_64.
+Requires an NVIDIA GPU on Linux or Windows on x86_64. torch is the CUDA 12.9
+build from the PyTorch index. `onnxruntime-gpu` 1.30.0, which runs the lead
+and backing model of `musetric-separate`, is a CUDA 13.0 build: its CUDA
+provider needs CUDA 13 and cuDNN 9 on the machine
+([requirements](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html#requirements)).
+
+torch stays at 2.8.0 because whisperx 3.8.6 requires `torch~=2.8.0`,
+`torchaudio~=2.8.0` and `torchvision~=0.23.0`. The `export` group pins onnx
+1.22.0 and onnxscript 0.7.1: with onnx 1.21 and onnxscript 0.7.0 a
+restructured separation graph lost accuracy in its fp16 conversion, while the
+same change was bit-exact in torch and clean in an fp32 export
+(musetric/lab#72).
 
 The lab is not published to a package index. Its commands are installed from
 this clone, editable, so the scripts of Musetric that call them, such as
