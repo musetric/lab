@@ -5,9 +5,11 @@ default. The files in this directory are offline tooling for exporting the
 neural network core to ONNX and manually validating that core through Python
 `onnxruntime`.
 
-One graph is published, and the recipe below is the only way it is built: the
-blocked, all-fp16 core at T = 1100 is what `musetric` loads on desktop and on a
-phone alike.
+Two cores are built with one recipe: the teacher's, Aname's Mel-Band RoFormer
+Duality, and the student distilled from it
+([musetric/musetric#1081](https://github.com/musetric/musetric/issues/1081)),
+which `musetric` runs. The blocked, all-fp16 core at T = 1100 is what
+`musetric` loads on desktop and on a phone alike.
 
 ## Export Boundary
 
@@ -116,6 +118,80 @@ What each flag is for:
 - `split_concat_webgpu.py` re-trees wide `Concat`/`Split` to <=8-wide so every
   shader stays at <=9 storage buffers, under the strictest shipping cap
   (Dawn/Metal on macOS reports `maxStorageBuffersPerShaderStage = 10`).
+
+## Build the Student's Core
+
+The student's weights are published in PyTorch at
+<https://huggingface.co/musetric/mel-band-roformer-duality-student>
+(`model.safetensors` and `config.yaml` of `PooledMelBandRoformer`), its core at
+<https://huggingface.co/musetric/mel-band-roformer-duality-student-onnx>.
+`build_student_onnx.py` is `build_full_onnx.py` with the student's model and
+takes the same flags; the other four steps are the teacher's.
+
+```bash
+uv run hf download musetric/mel-band-roformer-duality-student \
+  model.safetensors config.yaml --revision c9d2c65a65d820bdd4efdc7d62bb348998969592 \
+  --local-dir tmp/models/student
+
+uv run --group export python scripts/onnx/roformer/build_student_onnx.py \
+  --checkpoint tmp/models/student/model.safetensors \
+  --config tmp/models/student/config.yaml \
+  --output tmp/models/core_t1100.onnx \
+  --core-only --fuse-rmsnorm --attn-block 128 --all-fp16 --frames 1100 --skip-gate \
+  --split-rows 2 --stream-slabs 4
+```
+
+then the teacher's other four steps under the student's name:
+
+```bash
+uv run --group export python scripts/onnx/roformer/split_concat_webgpu.py \
+  --input tmp/models/core_t1100.onnx \
+  --output tmp/models/duality_student_core_t1100.onnx
+
+uv run --group export python scripts/onnx/roformer/fp16_epsilon_audit.py \
+  tmp/models/duality_student_core_t1100.onnx
+
+uv run --group export python scripts/onnx/roformer/dispatch_rows_audit.py \
+  tmp/models/duality_student_core_t1100.onnx
+
+uv run python scripts/onnx/roformer/fuse_webgpu_kernels.py \
+  --model tmp/models/duality_student_core_t1100.onnx \
+  --out tmp/models/fused/duality_student_core_t1100.onnx
+```
+
+The fused graph reads `duality_student_core_t1100.onnx.data`; put it next to it.
+
+What the student's shape adds to the recipe:
+
+- **An hourglass for the pooled pairs.** The high bands are merged once and the
+  stream is averaged once to the deepest frame rate of the pooled pairs and
+  repeated back at the end; the detail the pooled pairs cannot see waits at full
+  rate and passes through their detail maps folded into one product. The
+  average and the repeat commute, so this is the function of the torch model,
+  and no full-rate stream is held inside the pooled pairs.
+- **Means and repeats as `Reshape`, `Split`, `Add` and `Concat`.** A `ReduceMean`
+  over the stream would be a row-dispatched kernel with millions of rows.
+- **The 32-frame time window as blocks.** 64 queries attend to the 128 keys
+  around them with a constant mask, rather than `Abs`, `LessOrEqual`, `And` and
+  `Where` nodes the product graph does not have; the pooled time attentions run
+  in blocks of 32 query rows.
+- **Rotary tables as constants.** Every table is filled once and sliced as the
+  library slices its cache, so the rotary folding and fusion below apply; the
+  full-rate time attentions share one table, as the teacher's share the
+  library's cache.
+- **The probabilities x values of the pooled time attentions padded to a
+  multiple of 4.** Those attentions see 275 and 550 frames, and on the Adreno 750
+  that MatMul, in fp32 after the time attentions' own rewrite below, came out
+  20-27 dB from the CPU provider in `measure:parity` of musetric, against 41-46 dB
+  on the Adreno 660 and the desktop. Zero columns appended to the probabilities
+  after the softmax and zero rows to the values make its reduction 276 and 552
+  and add nothing. Padding the keys instead, before the scores, fixed the
+  Adreno 750 and cost the Adreno 660 as much, so the scores and the softmax keep
+  275 and 550.
+
+Exported in fp32 (`--fp32`, without the two fp16 flags), the core gives the torch
+model's vocals at 118-133 dB on the songs of the model card's validation, so the
+rewrites keep the function.
 
 ## Keep Row-Dispatched Kernels Under 65535 Rows
 

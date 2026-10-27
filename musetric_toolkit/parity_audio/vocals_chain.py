@@ -4,10 +4,11 @@ import numpy as np
 import onnxruntime as ort
 import torch
 import yaml
+from safetensors.torch import load_file
 
 from musetric_toolkit.common import envs
 from musetric_toolkit.common.logger import send_message
-from musetric_toolkit.common.model_files import ensure_model_files
+from musetric_toolkit.common.model_files import ensure_model_file
 from musetric_toolkit.parity_audio.case_writer import CaseWriter
 from musetric_toolkit.parity_audio.product_stft import analyze, synthesize
 from musetric_toolkit.parity_audio.unit_plans import (
@@ -17,13 +18,19 @@ from musetric_toolkit.parity_audio.unit_plans import (
     vocals_plan,
 )
 from musetric_toolkit.separate_audio.ffmpeg.read import read_audio_file
-from musetric_toolkit.separate_audio.roformer.mel_band_roformer import MelBandRoformer
-from musetric_toolkit.separate_audio.roformer_utils import dict_to_namespace
+from musetric_toolkit.separate_audio.roformer.pooled_mel_band_roformer import (
+    PooledMelBandRoformer,
+)
+from musetric_toolkit.separate_audio.roformer_utils import (
+    AudioProcessor,
+    dict_to_namespace,
+)
 
 # The vocals half of the separation step: the product feeds the core the STFT of
 # an 1100-frame chunk (packages/server/src/analysis/models.rs VOCALS_GEOMETRY),
 # multiplies the spectrum by the masks it returns and folds the chunks with the
-# host's Hamming weights. The original is the Aname Duality checkpoint in torch.
+# host's Hamming weights. The original is the student distilled from Aname
+# Duality, its published weights in torch.
 
 SAMPLE_RATE = 44100
 CHANNELS = 2
@@ -33,17 +40,15 @@ FRAMES = 1100
 CHUNK_SAMPLES = HOP * (FRAMES - 1)
 
 
-def load_duality(models_path: Path, device: torch.device):
-    checkpoint_path = models_path / envs.model_checkpoint_rel_path
-    config_path = models_path / envs.model_config_rel_path
-    ensure_model_files(checkpoint_path, config_path)
+def load_student(models_path: Path, device: torch.device):
+    weights_path = models_path / envs.student_weights_rel_path
+    config_path = models_path / envs.student_config_rel_path
+    ensure_model_file(envs.student_weights_url, weights_path, "Model weights")
+    ensure_model_file(envs.student_config_url, config_path, "Model configuration")
     with config_path.open(encoding="utf-8") as handle:
-        raw_config = yaml.load(handle, Loader=yaml.FullLoader)  # noqa: S506
-    config = dict_to_namespace(raw_config)
-    model = MelBandRoformer(**vars(config.model))
-    model.load_state_dict(
-        torch.load(checkpoint_path, map_location="cpu", weights_only=True)
-    )
+        config = dict_to_namespace(yaml.safe_load(handle))
+    model = PooledMelBandRoformer(**vars(config.model))
+    model.load_state_dict(load_file(weights_path))
     return model.to(device).eval(), config
 
 
@@ -68,7 +73,7 @@ def apply_masks(spectrum: np.ndarray, masks: np.ndarray) -> np.ndarray:
     return masked
 
 
-def torch_masks(model: MelBandRoformer, stft_repr: np.ndarray) -> np.ndarray:
+def torch_masks(model: PooledMelBandRoformer, stft_repr: np.ndarray) -> np.ndarray:
     """The per-bin masks of the original forward: band masks scattered and averaged."""
     device = next(model.parameters()).device
     with torch.inference_mode():
@@ -94,68 +99,21 @@ def onnx_masks(onnx_path: Path, stft_repr: np.ndarray) -> np.ndarray:
     return masks.astype(np.float64)
 
 
-def author_demix(model: MelBandRoformer, config, mixture: np.ndarray) -> np.ndarray:
-    """Vocals by the model's published inference (Music Source Separation Training,
-    `demix` in generic mode) with the checkpoint's own chunk, overlap and AMP."""
+def author_demix(
+    model: PooledMelBandRoformer, config, mixture: np.ndarray
+) -> np.ndarray:
+    """Vocals by the model's published inference: the lab's separator, 11 s
+    windows every 8 s with Hamming weights, in fp32."""
     device = next(model.parameters()).device
-    chunk_size = config.audio.chunk_size
-    fade_size = chunk_size // 10
-    step = chunk_size // config.inference.num_overlap
-    border = chunk_size - step
-    batch_size = config.inference.batch_size
-    window_base = torch.ones(chunk_size)
-    window_base[:fade_size] = torch.linspace(0, 1, fade_size)
-    window_base[-fade_size:] = torch.linspace(1, 0, fade_size)
-
-    mix = torch.from_numpy(mixture.astype(np.float32))
-    length_init = mix.shape[-1]
-    padded = length_init > 2 * border and border > 0
-    if padded:
-        mix = torch.nn.functional.pad(mix, (border, border), mode="reflect")
-    result = torch.zeros(mix.shape)
-    counter = torch.zeros(mix.shape)
-    batch_data: list[torch.Tensor] = []
-    batch_locations: list[tuple[int, int]] = []
-    position = 0
-    with (
-        torch.autocast(device.type, enabled=bool(config.training.use_amp)),
-        torch.inference_mode(),
-    ):
-        while position < mix.shape[1]:
-            part = mix[:, position : position + chunk_size]
-            chunk_len = part.shape[-1]
-            pad_mode = "reflect" if chunk_len > chunk_size // 2 else "constant"
-            part = torch.nn.functional.pad(
-                part, (0, chunk_size - chunk_len), mode=pad_mode, value=0
-            )
-            batch_data.append(part)
-            batch_locations.append((position, chunk_len))
-            position += step
-            if len(batch_data) >= batch_size or position >= mix.shape[1]:
-                estimated = model(torch.stack(batch_data).to(device)).float().cpu()
-                window = window_base.clone()
-                if position - step == 0:
-                    window[:fade_size] = 1
-                elif position >= mix.shape[1]:
-                    window[-fade_size:] = 1
-                for index, (start, seg_len) in enumerate(batch_locations):
-                    result[..., start : start + seg_len] += (
-                        estimated[index, ..., :seg_len] * window[..., :seg_len]
-                    )
-                    counter[..., start : start + seg_len] += window[..., :seg_len]
-                batch_data.clear()
-                batch_locations.clear()
-    sources = torch.nan_to_num(result / counter, nan=0.0)
-    if padded:
-        sources = sources[..., border:-border]
-    return sources.double().numpy()
+    sources = AudioProcessor(device, config).demix(mixture.astype(np.float32), model)
+    return sources[config.training.target_instrument].astype(np.float64)
 
 
 def run(args, writer: CaseWriter) -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     torch.backends.cuda.matmul.allow_tf32 = False
     torch.backends.cudnn.allow_tf32 = False
-    model, config = load_duality(Path(args.models_path), device)
+    model, config = load_student(Path(args.models_path), device)
 
     source = read_audio_file(args.audio_path, SAMPLE_RATE, CHANNELS).astype(np.float64)
     mixture = normalize_peak(source)

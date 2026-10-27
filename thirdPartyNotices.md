@@ -100,6 +100,7 @@ SOFTWARE.
 - License: Apache-2.0.
 - License source: Hugging Face model card metadata.
 - Lineage: fine-tuned from SYH99999/MelBandRoformerMergedSYHFTBeta1 (MIT), which builds on KimberleyJSN/melbandroformer (MIT); checked by comparing the weights.
+- Students: the teacher and the starting weights of musetric/mel-band-roformer-duality-student (below).
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use
 these files except in compliance with the License. You may obtain a copy of the
@@ -112,35 +113,13 @@ under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
 CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-## Music Source Separation Training
+## musetric/mel-band-roformer-duality-student
 
-- Source: https://github.com/ZFTurbo/Music-Source-Separation-Training
-- Usage: the generic-mode `demix` inference loop (chunks, overlap, fade window, border padding, batches), reproduced as the model author's inference in the parity reference.
-- Local files: `musetric_toolkit/parity_audio/vocals_chain.py`.
-- License: MIT.
-- License source: upstream `LICENSE`.
-
-MIT License
-
-Copyright (c) 2024 Roman Solovyev (ZFTurbo)
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+- Source: https://huggingface.co/musetric/mel-band-roformer-duality-student, revision `c9d2c65a65d820bdd4efdc7d62bb348998969592`.
+- Usage: weights (`model.safetensors`) and config (`config.yaml`) of the vocals model the product runs, downloaded as the torch original of the vocals parity reference, and the source of the ONNX core exported by `scripts/onnx/roformer/build_student_onnx.py`.
+- Local files: `musetric_toolkit/common/envs.py`, `musetric_toolkit/parity_audio/vocals_chain.py`, `musetric_toolkit/separate_audio/roformer/pooled_mel_band_roformer.py`, `scripts/onnx/roformer/build_student_onnx.py`, `scripts/onnx/roformer/converting.md`.
+- License: Apache-2.0, as the weights of Aname-Tommy/Mel-Band-Roformer_Duality it starts from (above, with the license text).
+- Lineage: distilled from Aname-Tommy/Mel-Band-Roformer_Duality by Musetric on openly licensed audio; the shape and the training are described on its model card.
 
 ## python-audio-separator
 
