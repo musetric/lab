@@ -35,6 +35,7 @@ musetric-chords = "musetric_toolkit.chords_audio.main_cli:main_cli"
 musetric-pitch = "musetric_toolkit.pitch_audio.main_cli:main_cli"
 musetric-pitch-zoo = "musetric_toolkit.pitch_zoo.main_cli:main_cli"
 musetric-parity = "musetric_toolkit.parity_audio.main_cli:main_cli"
+musetric-rhythm-bench = "musetric_toolkit.rhythm_bench.main_cli:main_cli"
 
 [tool.uv]
 # The uv of every machine and of CI: setup-uv in CI reads this pin too.
