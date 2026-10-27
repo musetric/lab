@@ -9,6 +9,17 @@ model_mel_band_roformer_dir = "mel_band_roformer_duality"
 model_checkpoint_rel_path = Path(model_mel_band_roformer_dir) / "model.ckpt"
 model_config_rel_path = Path(model_mel_band_roformer_dir) / "config.yaml"
 
+# The vocals model of the product: the student distilled from Duality.
+student_revision_url = (
+    "https://huggingface.co/musetric/mel-band-roformer-duality-student/resolve/"
+    "c9d2c65a65d820bdd4efdc7d62bb348998969592"
+)
+student_weights_url = f"{student_revision_url}/model.safetensors"
+student_config_url = f"{student_revision_url}/config.yaml"
+student_dir = "mel_band_roformer_duality_student"
+student_weights_rel_path = Path(student_dir) / "model.safetensors"
+student_config_rel_path = Path(student_dir) / "config.yaml"
+
 karaoke_mdx_model_url = (
     "https://huggingface.co/AI4future/RVC/resolve/main/UVR_MDXNET_KARA_2.onnx"
 )
