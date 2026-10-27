@@ -2,6 +2,8 @@
 
 The lab of [Musetric](https://github.com/musetric/musetric): the reference of every processing step in torch, the export of the models to ONNX, and their training.
 
+Defects and ideas are reported in [musetric/musetric](https://github.com/musetric/musetric/issues); this repository has no issues of its own.
+
 ## Installation
 
 Requires an NVIDIA GPU on Linux or Windows on x86_64. torch is the CUDA 12.9
