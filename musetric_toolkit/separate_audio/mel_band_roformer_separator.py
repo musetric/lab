@@ -4,11 +4,15 @@ from pathlib import Path
 import numpy as np
 import torch
 import yaml
+from safetensors.torch import load_file
 
 from musetric_toolkit.separate_audio import utils
 from musetric_toolkit.separate_audio.ffmpeg.read import read_audio_file
 from musetric_toolkit.separate_audio.ffmpeg.write import write_audio_file
 from musetric_toolkit.separate_audio.roformer.mel_band_roformer import MelBandRoformer
+from musetric_toolkit.separate_audio.roformer.pooled_mel_band_roformer import (
+    PooledMelBandRoformer,
+)
 from musetric_toolkit.separate_audio.roformer_utils import (
     AudioProcessor,
     dict_to_namespace,
@@ -53,10 +57,19 @@ class MelBandRoformerSeparator:
             return
 
         self.config = self._load_config()
-        model = MelBandRoformer(**vars(self.config.model))
-        checkpoint = torch.load(
-            self.model_checkpoint_path, map_location="cpu", weights_only=True
+        # a config with per-pair pooling describes the distilled student
+        model_class = (
+            PooledMelBandRoformer
+            if hasattr(self.config.model, "pool")
+            else MelBandRoformer
         )
+        model = model_class(**vars(self.config.model))
+        if Path(self.model_checkpoint_path).suffix == ".safetensors":
+            checkpoint = load_file(self.model_checkpoint_path)
+        else:
+            checkpoint = torch.load(
+                self.model_checkpoint_path, map_location="cpu", weights_only=True
+            )
         model.load_state_dict(checkpoint)
         self.model = model.to(self.device)
         self.model.eval()

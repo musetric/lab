@@ -66,7 +66,7 @@ SOFTWARE.
 
 - Source: https://github.com/lucidrains/BS-RoFormer
 - Usage: `MelBandRoformer` and attention model architecture adapted for local separation checkpoints.
-- Local files: `musetric_toolkit/separate_audio/roformer/mel_band_roformer.py`, `musetric_toolkit/separate_audio/roformer/attend.py`.
+- Local files: `musetric_toolkit/separate_audio/roformer/mel_band_roformer.py`, `musetric_toolkit/separate_audio/roformer/attend.py`, `musetric_toolkit/separate_audio/roformer/pooled_mel_band_roformer.py` (built on the first).
 - License: MIT.
 - License source: upstream `LICENSE`.
 
