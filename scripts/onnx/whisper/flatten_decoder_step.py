@@ -1,27 +1,3 @@
-"""Split the merged decoder into a flat cached step and a cross-attention projection.
-
-The merged decoder holds two copies of the network behind an `If`: the first step
-(no cache, the prompt, cross-attention keys and values computed from the encoder)
-and every later step (one token, everything cached).
-
-This writes two graphs:
-
-* the decoder with the `If` replaced by the cached-step branch, the step graph.
-  `use_cache_branch` is gone; `encoder_hidden_states` stays as an input nothing
-  reads, so the pipeline keeps handing it over for the first step;
-* `cross_kv`: the encoder states' key and value projections of every layer, the
-  part of the first branch the step graph does not have.
-
-The first step is then the cross projection plus the prompt fed through the step
-graph one token at a time, which applies exactly the causal mask the first branch
-builds for the whole prompt.
-
-    uv run python scripts/onnx/whisper/flatten_decoder_step.py \
-      --input  decoder_model_merged_fp16.onnx \
-      --step   decoder_model_merged_fp16.onnx \
-      --cross  cross_kv_fp16.onnx
-"""
-
 # ruff: noqa: T201
 
 import argparse
@@ -51,7 +27,6 @@ def branch_of(node, name):
 
 
 def prune(graph):
-    """Drop nodes and initializers nothing reads any more."""
     while True:
         read = {name for node in graph.node for name in node.input}
         read |= {value.name for value in graph.output}
@@ -67,7 +42,6 @@ def prune(graph):
 
 
 def flatten(model):
-    """Replace the `If` with its cached branch, wired to the `If` outputs."""
     graph = model.graph
     branching = next(node for node in graph.node if node.op_type == "If")
     cached = branch_of(branching, CACHED)
@@ -98,7 +72,6 @@ def flatten(model):
 
 
 def cross_projection(model):
-    """The encoder states' key/value projections, as a graph of their own."""
     graph = model.graph
     branching = next(node for node in graph.node if node.op_type == "If")
     first = branch_of(branching, FIRST)

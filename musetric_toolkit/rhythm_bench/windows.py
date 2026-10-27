@@ -5,11 +5,6 @@ from pathlib import Path
 from musetric_toolkit.rhythm_bench.beat_counts import off_beat_intervals
 from musetric_toolkit.rhythm_bench.variant import read_variant, tracks_with
 
-# Where two variants click differently: the track is cut into windows of 15 s,
-# and a window is kept when the seconds of spurious and gap intervals starting
-# in it differ by 2 s or more between the variants. The kept windows are the
-# places to listen to with `listen`.
-
 WINDOW_SECONDS = 15.0
 MIN_DIFFERENCE = 2.0
 

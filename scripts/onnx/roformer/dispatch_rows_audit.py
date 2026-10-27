@@ -1,20 +1,3 @@
-"""Audit exported ONNX graphs for row-dispatched kernels that overflow on WebGPU.
-
-Several onnxruntime WebGPU kernels run one workgroup per row with no bounds check:
-the normalizations, Softmax, LpNormalization, TopK, InstanceNormalization and the
-Reduce* family. Past maxComputeWorkgroupsPerDimension rows their spare workgroups
-write past the end of the output (musetric/musetric#885).
-
-The rule this enforces: no such node sees more than 65535 rows, the WebGPU default
-cap, and every such node has a static input shape so that can be checked. Shapes
-are inferred from the graph inputs first, so a static-input graph without
-value_info is checked too. The Reduce* count is the number of reductions, an upper
-bound: onnxruntime runs some reductions through a naive kernel that has the guard.
-
-Usage:
-  uv run python scripts/onnx/roformer/dispatch_rows_audit.py model.onnx [more.onnx ...]
-"""
-
 # ruff: noqa: T201 -- CLI audit tool: stdout is its interface.
 
 import argparse
@@ -26,7 +9,6 @@ import onnx
 from onnx import numpy_helper, shape_inference
 
 WEBGPU_DISPATCH_ROWS = 65535
-# from opset 13 Softmax normalizes one axis; before it, everything past `axis`
 SOFTMAX_AXIS_OPSET = 13
 
 LEADING_AXES_OPS = frozenset(
@@ -66,7 +48,6 @@ def parse_args() -> argparse.Namespace:
 
 
 def walk_graphs(graph):
-    """The graph and every subgraph an If/Loop/Scan attribute carries."""
     yield graph
     for node in graph.node:
         for attribute in node.attribute:
@@ -104,7 +85,6 @@ def reduce_axes(node, rank: int, constants: dict) -> list[int] | None:
 
 
 def dispatch_rows(node, dims: list[int], opset: int, constants: dict) -> int | None:
-    """Rows the kernel dispatches one workgroup each for, None when unknown."""
     rank = len(dims)
     size = math.prod(dims)
     if node.op_type in LAST_AXIS_OPS:
@@ -125,8 +105,6 @@ def dispatch_rows(node, dims: list[int], opset: int, constants: dict) -> int | N
 
 
 def audit_model(path: Path) -> tuple[int, int]:
-    # Rewritten graphs often carry no value_info, so infer the shapes first; a
-    # static input is enough for inference to reach every row-dispatched node.
     model = shape_inference.infer_shapes(
         onnx.load(str(path), load_external_data=False), data_prop=True
     )

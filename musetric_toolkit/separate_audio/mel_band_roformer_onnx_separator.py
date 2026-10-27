@@ -13,21 +13,8 @@ from musetric_toolkit.separate_audio.ffmpeg.write import write_audio_file
 from musetric_toolkit.separate_audio.roformer.mel_band_roformer import MelBandRoformer
 from musetric_toolkit.separate_audio.roformer_utils import dict_to_namespace
 
-# ONNX host for the BS-RoFormer-derived MelBandRoformer separation path.
-# See thirdPartyNotices.md for attribution.
-
 
 class MelBandRoformerOnnxSeparator:
-    """ONNX-backed separator for manual validation of an exported NN core.
-
-    The regular CLI keeps using the torch separator as the reference path. This
-    class runs only the exported neural-network core through onnxruntime; STFT,
-    iSTFT, mask scatter, chunking, and reconstruction remain host-side in torch.
-    The full torch checkpoint is not loaded: only config-derived host buffers are
-    needed for the surrounding DSP stages.
-
-    onnxruntime-gpu ships in the default install and is imported lazily.
-    """
 
     def __init__(
         self,
@@ -58,9 +45,6 @@ class MelBandRoformerOnnxSeparator:
             return dict_to_namespace(yaml.load(f, Loader=yaml.FullLoader))  # noqa: S506
 
     def _build_host(self):
-        # Build the model from config to obtain the STFT host stages and their
-        # buffers, then drop the heavy NN submodules (now owned by the ONNX core)
-        # to free ~1.5GB of unused parameters.
         host = MelBandRoformer(**vars(self.config.model))
         for name in ("layers", "band_split", "mask_estimators"):
             if hasattr(host, name):
@@ -69,8 +53,6 @@ class MelBandRoformerOnnxSeparator:
         return host.to(self.device).eval()
 
     def _make_session(self):
-        # onnxruntime-gpu ships in the default install; import lazily so module
-        # import never pays the onnxruntime cost unless ONNX separation is used.
         try:
             import onnxruntime as ort  # noqa: PLC0415  (lazy import)
         except ImportError as exc:
@@ -79,8 +61,6 @@ class MelBandRoformerOnnxSeparator:
                 "It ships with the default install (`uv sync`) as onnxruntime-gpu."
             ) from exc
 
-        # Prefer a GPU EP per cross-platform matrix: CUDA (Linux/NVIDIA),
-        # DirectML (Windows/any GPU), CoreML (macOS); CPU as last resort.
         available = ort.get_available_providers()
         gpu = [
             p
@@ -95,14 +75,10 @@ class MelBandRoformerOnnxSeparator:
 
         def _options() -> "ort.SessionOptions":
             options = ort.SessionOptions()
-            # Mute ORT's info/warn spam (e.g. constant-fold "no CPU kernel for
-            # Sin/Cos" on the fp16 core — harmless) unless running at debug level.
             if logging.getLogger().level > logging.DEBUG:
                 options.log_severity_level = 3
             return options
 
-        # Default optimizations first; fall back to ORT_DISABLE_ALL if the
-        # external-data model trips the load-time shape-inference pass.
         try:
             session = ort.InferenceSession(
                 str(self.model_onnx_path),
@@ -153,8 +129,6 @@ class MelBandRoformerOnnxSeparator:
         return min(int(8 * self.config.audio.sample_rate), self._chunk_size())
 
     def _core(self, part: torch.Tensor) -> torch.Tensor:
-        # part: (channels, length). Pad to the static chunk_size the ONNX core was
-        # exported with, run encode -> ORT core -> decode, trim back to length.
         chunk_size = self._chunk_size()
         length = part.shape[-1]
         if length < chunk_size:

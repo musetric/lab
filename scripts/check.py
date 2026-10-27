@@ -24,6 +24,7 @@ def check():
         f"{CHECKS} english",
         f"{CHECKS} notices",
         f"{CHECKS} links",
+        f"{CHECKS} comments",
         "uv run --only-group check ruff check . --no-cache",
         "uv run --only-group check isort . --check-only",
         "uv run --only-group check black . --check",

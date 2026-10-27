@@ -1,14 +1,3 @@
-"""Stage the exported Beat This! file set for publishing.
-
-Copies the ONNX graph, the mel filterbank and config.json from the export dir
-into the clone of the model repository. Binary files are copied verbatim; JSON
-text is normalized to LF so the staged files match what Hugging Face serves,
-keeping them consistent with the sizes and hashes the server pins.
-
-    uv run python scripts/onnx/beat_this/stage_beat_this.py \
-      --export <export-dir> --dest ../models/beat-this-onnx
-"""
-
 # ruff: noqa: T201
 
 import argparse

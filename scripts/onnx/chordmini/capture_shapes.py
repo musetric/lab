@@ -1,22 +1,4 @@
 # ruff: noqa: T201
-"""Capture real runtime shapes of a dynamic ONNX graph's interesting tensors.
-
-Runs the model once in ORT CPU with selected intermediates exposed as outputs
-and records the observed tensor shapes. ONNX shape inference cannot resolve
-the shapes of graphs whose Reshape nodes read `Shape` outputs at runtime, so
-this forward pass is the reliable source for static rewrites.
-
-By default every intermediate is exposed; graphs that fail to load that way
-can restrict the probe to the inputs of specific op types with --ops.
-
-The shapes are captured for one batch, --windows, and a rewrite built from them
-only runs at that batch.
-
-Usage:
-    uv run python capture_shapes.py --model beat_this.onnx --frames 1500 \
-        --out shapes1500.json [--probe probe_all.onnx] [--ops Transpose,Conv] \
-        [--windows 16]
-"""
 
 import argparse
 import json
@@ -67,11 +49,6 @@ def pin_windows_dim(model: onnx.ModelProto, windows: int, frames: int) -> None:
 
 
 def expose_probe_outputs(model: onnx.ModelProto, watch_ops: set[str]) -> None:
-    """Infer shapes and declare the watched node inputs as graph outputs.
-
-    Outputs are declared with an unknown rank: dims taken from inference can
-    disagree with ORT's own plan and abort the load.
-    """
     try:
         inferred = onnx.shape_inference.infer_shapes(model, strict_mode=False)
         model.CopyFrom(inferred)

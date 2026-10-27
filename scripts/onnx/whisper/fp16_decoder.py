@@ -1,13 +1,3 @@
-"""Convert the merged Whisper decoder to float16 for onnxruntime-web.
-
-The conversion runs without `keep_io_types`: `encoder_hidden_states` is taken
-back to float32 and cast on entry, `logits` and `cross_attentions.*` are cast
-back on the way out, and the KV cache stays float16 end to end.
-
-Ordering is then repaired in place, which needs the `If` branches' outer-scope
-reads to count as dependencies of the `If` node itself.
-"""
-
 # ruff: noqa: T201
 
 import argparse
@@ -20,7 +10,6 @@ from optimum.onnx.graph_transformations import check_and_save_model
 
 
 def subgraph_free_names(graph: onnx.GraphProto) -> set[str]:
-    """Names a subgraph reads from the enclosing scope."""
     local = {init.name for init in graph.initializer}
     local.update(value.name for value in graph.input)
     free = set()
@@ -44,7 +33,6 @@ def _attribute_graphs(attribute: onnx.AttributeProto) -> list[onnx.GraphProto]:
 
 
 def node_dependencies(node: onnx.NodeProto) -> set[str]:
-    """Every value a node needs, including what its branches read from outside."""
     deps = {name for name in node.input if name}
     for attribute in node.attribute:
         for sub in _attribute_graphs(attribute):
@@ -72,7 +60,6 @@ def toposort_graph(graph: onnx.GraphProto) -> None:
 
 
 def rename_value(graph: onnx.GraphProto, old: str, new: str) -> None:
-    """Point every consumer of ``old`` at ``new``, subgraphs included."""
     for node in graph.node:
         for index, name in enumerate(node.input):
             if name == old:
@@ -83,7 +70,6 @@ def rename_value(graph: onnx.GraphProto, old: str, new: str) -> None:
 
 
 def keep_fp32_inputs(graph: onnx.GraphProto, names: set[str]) -> int:
-    """Restore the named inputs to float32 and cast them to float16 on entry."""
     patched = 0
     for value in graph.input:
         if value.name not in names:
@@ -105,7 +91,6 @@ def keep_fp32_inputs(graph: onnx.GraphProto, names: set[str]) -> int:
 
 
 def keep_fp32_outputs(graph: onnx.GraphProto, prefixes: tuple[str, ...]) -> int:
-    """Cast the matching outputs back to float32 before they leave the graph."""
     selected = [value for value in graph.output if value.name.startswith(prefixes)]
     for value in selected:
         internal = f"{value.name}_fp16"

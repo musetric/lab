@@ -1,38 +1,3 @@
-"""Export the core of the distilled vocals student with the teacher's recipe.
-
-The student of musetric/musetric#1081 is published as
-`musetric/mel-band-roformer-duality-student`: `model.safetensors` and
-`config.yaml` of `PooledMelBandRoformer`. This script builds its core with
-build_full_onnx.py, with the same flags as the teacher's, and changes only
-what the student's shape needs:
-
-- the pair loop as an hourglass: the high bands merged once, the stream
-  averaged once to the deepest frame rate of the pooled pairs and repeated back
-  at the end, the detail the pooled pairs cannot see kept at full rate and
-  passed through the detail maps folded into one product. The average and the
-  repeat commute, so this is the function of the PyTorch model, pair by pair,
-  and no full-rate stream is held inside the pooled pairs;
-- the windowed time attention as blocks of 2W queries over the 4W keys around
-  them with a constant mask, the pooled time attentions in blocks of 32 query
-  rows, the band maps as one MatMul and Add;
-- the probabilities x values of the pooled time attentions, which see 275 and
-  550 frames, padded to a multiple of 4 (pad_values);
-- every rotary table a constant, sliced as the library slices its cache, so
-  the exporter folds it and fuse_webgpu_kernels.py makes it one kernel;
-- means and repeats as Reshape, Split, Add and Concat, which the product graph
-  already has: a ReduceMean over the stream would dispatch millions of rows.
-
-    uv run --group export python scripts/onnx/roformer/build_student_onnx.py \\
-      --checkpoint tmp/models/student/model.safetensors \\
-      --config tmp/models/student/config.yaml \\
-      --output tmp/models/core_t1100.onnx \\
-      --core-only --fuse-rmsnorm --attn-block 128 --all-fp16 --frames 1100 \\
-      --skip-gate --split-rows 2 --stream-slabs 4
-
-then `split_concat_webgpu.py`, the two audits and `fuse_webgpu_kernels.py` as
-for the teacher (converting.md).
-"""
-
 import build_full_onnx as bfo  # type: ignore[import-not-found]
 import numpy as np
 import torch
@@ -54,7 +19,6 @@ MERGED_SLABS = 4
 
 
 def down(x: torch.Tensor, p: int, axis: int) -> torch.Tensor:
-    """The mean of p neighbours as Reshape, Split and adds."""
     if p == 1:
         return x
     shape = list(x.shape)
@@ -67,7 +31,6 @@ def down(x: torch.Tensor, p: int, axis: int) -> torch.Tensor:
 
 
 def up(y: torch.Tensor, p: int, axis: int, n: int) -> torch.Tensor:
-    """Each value p times as Concat and Reshape."""
     if p == 1:
         return y
     shape = list(y.shape)
@@ -91,9 +54,6 @@ def unmerge_high(y: torch.Tensor, first: int) -> torch.Tensor:
 def rotate_from_table(
     self: Rotary, t: torch.Tensor, seq_dim=None, offset=0, scale=None
 ) -> torch.Tensor:
-    """Rotary.rotate_queries_or_keys from a constant table one row longer than
-    the sequence, filled by the warm-up forward and sliced as the library
-    slices its cached frequencies."""
     n = t.shape[-2]
     if not hasattr(self, "cached_angles"):
         with torch.no_grad():
@@ -112,10 +72,6 @@ Rotary.rotate_queries_or_keys = rotate_from_table
 
 
 class BlockedWindow(torch.nn.Module):
-    """Attention within +-W positions as blocks: 2W queries attend to their
-    own block and half of each neighbour, 4W keys, in one batched MatMul; a
-    constant bias keeps exactly |i - j| <= W and drops the padding. The
-    softmax rows are chunked by the wrapped Attend."""
 
     def __init__(self, base: Attend, window: int) -> None:
         super().__init__()
@@ -146,8 +102,6 @@ class BlockedWindow(torch.nn.Module):
         return out.reshape(*lead, blocks * block, d)[..., :n, :]
 
     def bias(self, n: int, blocks: int, block: int, like: torch.Tensor) -> torch.Tensor:
-        # a buffer filled by the warm-up forward, so the graph holds a constant
-        # rather than Abs, LessOrEqual, And and Where nodes
         name = f"window_bias_{n}"
         if not hasattr(self, name):
             with torch.no_grad():
@@ -172,8 +126,6 @@ def load_model(checkpoint, config) -> PooledMelBandRoformer:
         if isinstance(getattr(module, "attend", None), LocalAttend):
             window = module.attend.window
             module.attend = BlockedWindow(Attend(dropout=0.0, flash=False), window)
-    # the full-rate time attentions share one rotary table, as the teacher's
-    # share the library's cache: one constant for the graph, not one each
     shared = {}
     for time_t, _ in model.layers:
         for attn, _ in time_t.layers:
@@ -185,7 +137,6 @@ def load_model(checkpoint, config) -> PooledMelBandRoformer:
 
 
 def grouped_matmul(x, w, b, slabs):
-    """x [b, t, f, d] times w [d, o] as one MatMul over rows [1, t * f, d]."""
     t = x.shape[1]
     rows = rearrange(x, "b t f d -> b (t f) d")
     out = rearrange(torch.matmul(rows, w.to(x.device)), "b (t f) d -> b t f d", t=t)
@@ -195,8 +146,6 @@ def grouped_matmul(x, w, b, slabs):
 def run_pair(
     time_t, freq_t, x: torch.Tensor, slabs: int, band_map=None
 ) -> torch.Tensor:
-    """One pair over stream slabs: the time transformer over band slabs, then
-    the band transformer over frame slabs, or the band map x (I + W) + b."""
     outs = []
     for slab in x.chunk(slabs, dim=2):
         bands = slab.shape[2]
@@ -216,10 +165,6 @@ def run_pair(
 
 
 def detail_maps(model: PooledMelBandRoformer) -> tuple[dict, torch.Tensor]:
-    """A path x Wx + c Wc + b over features ("x" the stream, "c" its pooled
-    view, "d" = x - c) as d Wa + c (Wa + Wb) + b: the pooled part joins the
-    pair's change, and the detail parts of all path pairs fold into one
-    product of (I + Wa) applied to the detail on the way back."""
     pooled, product = {}, None
     for i, kinds in enumerate(model.detail_kinds):
         if not kinds:
@@ -239,9 +184,6 @@ def detail_maps(model: PooledMelBandRoformer) -> tuple[dict, torch.Tensor]:
 
 
 def prepare(model: PooledMelBandRoformer) -> None:
-    """Once, in the eager warm-up after build_full_onnx blocks attention: the
-    pooled time attentions in blocks of 32 query rows, and the maps as
-    constants of the graph, computed outside the trace."""
     for i, k in enumerate(model.pool):
         if k > 1:
             for attn, _ in model.layers[i][0].layers:
@@ -255,9 +197,6 @@ def prepare(model: PooledMelBandRoformer) -> None:
 
 
 class Hourglass:
-    """The stream of the pair loop: `m` at the current rate, the full-rate
-    `detail` it lacks, the merged bands' `band_detail`, and the folded path
-    product still to be applied to both."""
 
     def __init__(self, x: torch.Tensor, first: int) -> None:
         self.first = first
@@ -299,8 +238,6 @@ class Hourglass:
 def hourglass_net_forward(
     model: PooledMelBandRoformer, stft_repr: torch.Tensor, slabs: int
 ) -> torch.Tensor:
-    """net_forward of the student: full-rate pairs, then the pairs at the
-    deepest rate, then the pairs at half of it, on one merge of the bands."""
     if not hasattr(model, "hourglass"):
         prepare(model)
     pooled_maps, path_product = model.hourglass
@@ -338,14 +275,6 @@ SHAPE = {}
 
 
 def pad_values(model, frames: int) -> int:
-    """The probabilities x values MatMul of the time attentions over `frames`
-    keys with its reduction padded to a multiple of 4: zero columns appended to
-    the probabilities after the softmax, zero rows to the values. The zeros add
-    nothing, exactly. On the Adreno 750, onnxruntime-web computes that MatMul
-    with visibly less precision when its reduction length is not a multiple of
-    4, and the pooled time attentions see 275 and 550 frames. The scores and
-    the softmax stay as they are: padded keys there cost the Adreno 660 its
-    precision."""
     import onnx  # noqa: PLC0415
     from onnx import numpy_helper  # noqa: PLC0415
 
@@ -388,7 +317,6 @@ def pad_values(model, frames: int) -> int:
             )
         ]
         if f"{values}_padded" not in padded:
-            # the values as the fp32 pass cast them: their shape is the fp16 input's
             shape = dims.get(values) or dims[values.removesuffix("_fp32")]
             rows = [*shape[:-2], pad, shape[-1]]
             nodes.append(
@@ -408,9 +336,6 @@ def pad_values(model, frames: int) -> int:
 
 
 def keep_time_attention_fp32(model, frames: int) -> int:
-    """The full-attention time softmaxes in fp32 at every rate they run at,
-    their probabilities x values padded where the rate is not a multiple of
-    4; the windowed ones are left as they are."""
     windows = zip(SHAPE["pool"], SHAPE["time_window"], strict=True)
     rates = {frames // k for k, window in windows if not window}
     kept = sum(_keep_time_attention_fp32(model, n) for n in sorted(rates))

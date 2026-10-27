@@ -1,16 +1,3 @@
-"""Emit only the cross-attention heads the word times are read from.
-
-This narrows each `cross_attentions.*` output to the heads `alignment_heads`
-names in the generation config, inside both branches of the merged decoder, and
-rewrites `alignment_heads` to the new positions. Layers no head is taken from
-keep one.
-
-    uv run python scripts/onnx/whisper/trim_cross_attentions.py \
-      --input  decoder_model_merged_fp16.onnx \
-      --output decoder_model_merged_fp16.onnx \
-      --generation-config generation_config.json
-"""
-
 # ruff: noqa: T201
 
 import argparse
@@ -32,7 +19,6 @@ TRIM_PREFIX = "trim_cross_attentions"
 
 
 def subgraphs(graph):
-    """The graph itself and every graph nested in its nodes' attributes."""
     yield graph
     for node in graph.node:
         for attribute in node.attribute:
@@ -48,7 +34,6 @@ def layer_of(name):
 
 
 def kept_heads(alignment_heads, layers):
-    """Head indices to keep per layer, in the order the output will carry them."""
     kept = {layer: [] for layer in range(layers)}
     for layer, head in alignment_heads:
         if head not in kept[layer]:
@@ -69,7 +54,6 @@ BRANCHING = ("If", "Loop", "Scan")
 
 
 def comes_from_branch(name, producers):
-    """Whether the value is what a branching node handed the graph."""
     seen = set()
     while name not in seen:
         seen.add(name)
@@ -85,7 +69,6 @@ def comes_from_branch(name, producers):
 
 
 def rewrite(graph, index, kept):
-    """Gather the kept heads out of each cross-attention output of one graph."""
     outputs = [value for value in graph.output if value.name.startswith(OUTPUT_PREFIX)]
     if not outputs:
         return 0
@@ -101,8 +84,6 @@ def rewrite(graph, index, kept):
         source = f"{prefix}/full"
         indices = f"{prefix}/heads"
         producer.output[0] = source
-        # The value is on the compute path too: attention reshapes it back for
-        # the product with the values, and that reader keeps the whole tensor.
         for node in graph.node:
             for index_ in range(len(node.input)):
                 if node.input[index_] == value.name:
@@ -126,8 +107,6 @@ def rewrite(graph, index, kept):
 def apply(model, alignment_heads, layers):
     kept = kept_heads(alignment_heads, layers)
     total = 0
-    # Both branches of the merged decoder are narrowed; what the `If` hands the
-    # outer graph is then already narrow, so there the shape is only restated.
     for index, graph in enumerate(subgraphs(model.graph)):
         count = rewrite(graph, index, kept)
         if count:

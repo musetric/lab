@@ -19,12 +19,6 @@ from musetric_toolkit.parity_audio.unit_plans import (
 from musetric_toolkit.separate_audio.ffmpeg.read import read_audio_file
 from musetric_toolkit.separate_audio.mdx_net_separator import MDXNetSeparator
 
-# The voices step: the vocals stem, scaled to a unit peak, is padded and cut into
-# 256-frame chunks with a quarter overlap (packages/server/src/unit_plan.rs
-# lead_backing); the model returns the backing voices of each chunk, and the
-# lead is what remains. The original is UVR-MDXNet KARA2, published as ONNX, so
-# the export row compares our rewrite with that graph.
-
 SAMPLE_RATE = 44100
 CHANNELS = 2
 N_FFT = 5120
@@ -35,7 +29,6 @@ CHUNK_SAMPLES = HOP * (FRAMES - 1)
 
 
 def pack(spectrum: np.ndarray) -> np.ndarray:
-    """[channels, frames, bins] -> model input [1, 2 * channels, DIM_F, frames]."""
     channels = spectrum.shape[0]
     packed = np.zeros((1, 2 * channels, DIM_F, spectrum.shape[1]))
     for channel in range(channels):
@@ -73,7 +66,6 @@ def run_session(session: ort.InferenceSession, model_input: np.ndarray) -> np.nd
 
 
 def author_voices(models_path: Path, vocals_path: str) -> tuple[np.ndarray, np.ndarray]:
-    """Lead and backing by UVR-MDXNet inference as the lab runs it."""
     separator = MDXNetSeparator(
         model_path=models_path / envs.karaoke_mdx_model_rel_path,
         model_data_path=models_path / envs.mdx_model_data_rel_path,

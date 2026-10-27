@@ -1,23 +1,3 @@
-"""Generate the librosa CQT reference table used by @musetric/cqt tests.
-
-`@musetric/cqt` reproduces `librosa.cqt`, so its tests need librosa's numbers.
-Rather than committing reference arrays as binary assets, this script reduces
-the comparison to one scalar per bin: the CQT peak magnitude of a pure tone
-sitting on that bin's centre frequency.
-
-That scalar is what a binary fixture would otherwise be committed for. It is
-stable (the interior frames of a steady tone agree to ~1e-5), it pins the
-absolute scale of the transform - so a wrong `norm`, `scale`, gain or window
-cannot pass - and it is small enough to live in TypeScript, where the tests can
-read it.
-
-Bin mapping, silence, superposition and linearity are asserted analytically in
-`cqt.test.ts` and need nothing from here.
-
-    uv run python scripts/onnx/chordmini/generate_cqt_reference.py \
-      --out <packages/cqt/src/cqt/__test__/reference.ts>
-"""
-
 # ruff: noqa: T201
 
 from __future__ import annotations
@@ -37,8 +17,6 @@ BINS_PER_OCTAVE = 24
 TONE_AMPLITUDE = 0.5
 TONE_SECONDS = 4
 
-# One bin at each end of every octave, plus both ends of the range, so a
-# mis-mapped octave boundary or a reversed bin order cannot pass.
 TONE_BINS = [0, 12, 23, 24, 47, 48, 71, 72, 95, 96, 119, 120, 143]
 
 

@@ -1,12 +1,6 @@
 import re
 
-# Caption boilerplate Whisper writes on near-silent or instrumental regions, such
-# as subtitle credits; a segment whose text matches any pattern is dropped.
-
 _HALLUCINATION_PATTERNS = [
-    # Russian caption credits, e.g. "Субтитры создавал DimaTorzok",
-    # "Продолжение следует", or editor credits like
-    # "Редактор субтитров А.Семкин Корректор А.Егорова".  # noqa: RUF003
     r"субтитр",
     r"дима\s*торзок",
     r"dimatorzok",
@@ -15,24 +9,15 @@ _HALLUCINATION_PATTERNS = [
     r"продолжение\s+следует",
     r"подписывайтесь",
     r"спасибо\s+за\s+просмотр",
-    # English caption credits.
     r"subtitles?\s+by",
     r"thanks?\s+for\s+watching",
     r"please\s+subscribe",
     r"subscribe\s+to",
-    # Bare "Thank you" (one or more repeats, any casing/punctuation) emitted as a
-    # standalone segment on a silent/fading outro — a classic Whisper caption
-    # artifact. Anchored to the WHOLE segment so genuine lyrics that merely
-    # contain "thank you" mid-line are left intact; the repeat group also catches
-    # "Thank you. Thank you." chains.
     r"^(?:thank\s*you[\s.,!]*)+$",
-    # Cross-language caption-platform signatures.
     r"amara\.org",
     r"transcri(?:bed|ption)\s+by",
     r"www\.",
     r"\.com\b",
-    # The copyright-transcript signature and a credit of instrumental or silent
-    # outros.
     r"©\s*transcript",
     r"emily\s+beynon",
 ]
@@ -55,8 +40,6 @@ def filter_hallucinated_segments(segments: list[dict]) -> list[dict]:
     ]
 
 
-# A whole line that is only a sign-off ("Vielen Dank.", "Gracias.") is a
-# caption artifact as well; lyrics that merely contain the word stay.
 _SIGN_OFF = re.compile(
     r"^(?:vielen dank|danke(?: schön)?|gracias|muchas gracias|merci(?: beaucoup)?"
     r"|спасибо|thank you|thanks|bye(?: bye)?|tschüss|adiós|au revoir|до свидания)"
@@ -75,10 +58,6 @@ def filter_sign_off_segments(segments: list[dict]) -> list[dict]:
     ]
 
 
-# Caption credits Whisper writes into the same window as the lyrics. They are
-# cut out of the text as whole phrases, so the sung words around them stay;
-# a segment left with no text is dropped. The browser runtime cuts the same
-# phrases out of its words (packages/ai/src/transcription/hallucinationFilter.ts).
 _NOT_AFTER_LETTER = r"(?<![^\W\d_])"
 _CREDIT_PHRASES = [
     re.compile(_NOT_AFTER_LETTER + pattern, re.IGNORECASE)

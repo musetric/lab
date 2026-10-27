@@ -1,19 +1,3 @@
-"""Stage the published Whisper file set from an export dir into the model's clone.
-
-`convert.py` writes many graphs (fp32 + q4, all decoder variants); the model
-repo needs only the q4 encoder, the fp16 step decoder with its `cross_kv`
-projection, the merged q4 decoder and the tokenizer/config JSON.
-This copies exactly that set into the workspace's
-`models/whisper-large-v3-turbo-onnx/`, the clone published through git.
-
-The encoder is checked against `mobile_encoder.verify` and both decoders against
-`mobile_decoder.verify` on the way through, and staging refuses a graph that
-fails them.
-
-    uv run python scripts/onnx/whisper/stage_whisper.py \
-      --export tmp/whisper-export/openai/whisper-large-v3-turbo
-"""
-
 # ruff: noqa: T201
 
 import argparse
@@ -32,8 +16,6 @@ with contextlib.suppress(Exception):
 ENCODER = "encoder_model_q4.onnx"
 DECODERS = ["decoder_model_merged_fp16.onnx", "decoder_model_merged_q4.onnx"]
 
-# Workspace layout: <workspace>/lab/scripts/onnx/whisper/stage_whisper.py
-# and <workspace>/models/whisper-large-v3-turbo-onnx — so parents[4] is <workspace>.
 DEFAULT_DEST = (
     Path(__file__).resolve().parents[4] / "models" / "whisper-large-v3-turbo-onnx"
 )
@@ -58,8 +40,6 @@ PUBLISH_FILES = [
 
 
 def source_path(export: Path, rel: str) -> Path:
-    # convert.py leaves the graphs in `onnx/` and the JSON at the export root,
-    # while the model repo is flat.
     nested = export / "onnx" / rel
     return nested if nested.is_file() else export / rel
 
@@ -105,9 +85,6 @@ def main() -> None:
         if rel.endswith(".onnx"):
             shutil.copy2(source, target)
         else:
-            # Normalize text to LF so the local files match what Hugging Face
-            # serves (the hub normalizes text blobs to LF on commit); keeps the
-            # staged files consistent with the sizes and hashes the server pins.
             target.write_bytes(source.read_bytes().replace(b"\r\n", b"\n"))
         print(f"staged {rel}")
     print(f"staged {len(PUBLISH_FILES)} files into {dest}")

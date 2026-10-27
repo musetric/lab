@@ -2,11 +2,6 @@ from dataclasses import dataclass
 
 import numpy as np
 
-# The host's unit plans and weighted overlap-add (packages/server/src/unit_plan.rs
-# and unit_fold.rs), written again for the reference pipeline: where each unit of
-# a step starts, how long it is, and the weight of every sample when the units
-# are folded back into one signal.
-
 VOCALS_STEP_SECONDS = 8
 LEAD_BACKING_OVERLAP = 0.25
 LEAD_BACKING_COMPENSATE = 1.065
@@ -79,7 +74,6 @@ def lead_backing_plan(
 
 
 def unit_window(planar: np.ndarray, plan: UnitPlan, index: int) -> np.ndarray:
-    """The chunk the host sends for one unit, zero padded to a full chunk."""
     unit = plan.units[index]
     chunk = np.zeros((planar.shape[0], plan.chunk_samples))
     chunk[:, : unit.length] = planar[:, unit.start : unit.start + unit.length]

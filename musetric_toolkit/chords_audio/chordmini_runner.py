@@ -12,9 +12,6 @@ from musetric_toolkit.chords_audio.chordmini.utils import (
 )
 from musetric_toolkit.common.logger import send_message
 
-# ChordMini inference runner around the vendored ChordMini subset (MIT).
-# See musetric_toolkit/chords_audio/chordmini/NOTICE.md and thirdPartyNotices.md.
-
 CONFIG_PATH = Path(__file__).parent / "chordmini" / "ChordMini.yaml"
 BATCH_SIZE = 16
 

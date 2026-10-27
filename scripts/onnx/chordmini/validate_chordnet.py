@@ -1,19 +1,3 @@
-"""Validate the feature-to-logits ChordNet ONNX classifier against Torch.
-
-The deterministic random feature windows exercise the exact classifier
-boundary exported by ``export_chordnet.py``:
-
-    unnormalized log-CQT features [W, 108, 144]
-      -> normalization in the graph
-      -> ChordNet logits [W, 108, 170]
-
-This deliberately does not test CQT extraction, frame padding, smoothing, or
-argmax: those are GPU-host responsibilities outside the ONNX artifact.
-
-    uv run --group export python scripts/onnx/chordmini/validate_chordnet.py \
-      --onnx <export-dir>/chordnet.onnx --models-path <checkpoint-cache-dir>
-"""
-
 # ruff: noqa: T201
 
 import argparse
@@ -42,7 +26,6 @@ MAX_ABSOLUTE_ERROR_TOLERANCE = 1e-4
 
 
 def _validate_onnx_contract(session: ort.InferenceSession) -> None:
-    """Reject an ONNX artifact that is not the ChordNet classifier contract."""
     inputs = session.get_inputs()
     outputs = session.get_outputs()
     if len(inputs) != 1 or len(outputs) != 1:
@@ -63,7 +46,6 @@ def _validate_onnx_contract(session: ort.InferenceSession) -> None:
 
 
 def _random_features() -> np.ndarray:
-    """Produce stable unnormalized log-CQT-like windows for parity checking."""
     generator = np.random.default_rng(RANDOM_SEED)
     return generator.standard_normal(
         (WINDOW_COUNT, EXPECTED_SEQ_LEN, EXPECTED_N_BINS),
@@ -75,7 +57,6 @@ def _validate_logits(
     reference_logits: np.ndarray,
     onnx_logits: np.ndarray,
 ) -> tuple[float, float]:
-    """Check output contract and return maximum and mean absolute error."""
     expected_shape = (WINDOW_COUNT, EXPECTED_SEQ_LEN, EXPECTED_NUM_CHORDS)
     if reference_logits.shape != expected_shape:
         raise ValueError(
@@ -104,7 +85,6 @@ def _validate_logits(
 
 
 def main() -> None:
-    """Run deterministic Torch-versus-ONNX classifier parity validation."""
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--onnx",

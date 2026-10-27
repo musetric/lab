@@ -1,34 +1,4 @@
 # ruff: noqa: T201
-"""Static rewrite of ChordNet that avoids the broken Adreno WebGPU kernels.
-
-- Transpose families that select the broken shared-tile kernel
-  ((0,2,1), (0,1,3,2), (0,3,1,2), (0,3,2,1), (2,0,1)) become
-  Reshape(1D) -> Gather(const int32 idx) -> Reshape(target).
-  Rank-5 (2,0,3,1,4) head-split transposes and rank-4 (0,2,1,3) are kept.
-- Conv becomes Pad + Reshape + Gather(im2col idx) + MatMul(reshaped weights,
-  bias added back).
-- A four-dimensional MatMul folds its two batch axes into one, and a MatMul
-  whose constant weight has a width that is not a multiple of four is widened
-  with zero columns and sliced back. With --vec4-attention a four-dimensional
-  MatMul of more than eight rows is padded to the vec4 kernel instead of folded.
-
-Tensor shapes come from `capture_shapes.py` because ONNX shape inference
-cannot resolve runtime-computed Reshape shapes.
-
-Every Gather index and Reshape target is baked for the captured batch and
-frames, so the rewritten graph runs at that shape and no other; its input and
-output dims are pinned to it.
-
-The rewrite is faithful. The Adreno defects it avoids, and those it does not,
-are listed with their workarounds in musetric/musetric#975.
-
-Usage:
-    uv run python capture_shapes.py --model beat_this.onnx --frames 1500 \
-        --out shapes1500.json
-    uv run python rewrite_static_adreno.py --model beat_this.onnx \
-        --out beat_this_t1500.onnx --shapes shapes1500.json \
-        [--no-conv] [--no-transpose]
-"""
 
 import argparse
 import json
@@ -157,11 +127,6 @@ def rewrite_transpose(
 
 
 def rewrite_matmul(ctx: RewriteContext, node: onnx.NodeProto) -> bool:
-    """Compute a four-dimensional MatMul as a three-dimensional one.
-
-    Folding the two batch axes into one is exact: a batched MatMul multiplies
-    each matrix of the batch on its own, whatever the batch is shaped like.
-    """
     left = ctx.shapes.get(node.input[0])
     right = ctx.shapes.get(node.input[1])
     if left is None or right is None:
@@ -210,16 +175,6 @@ def rewrite_matmul(ctx: RewriteContext, node: onnx.NodeProto) -> bool:
 
 
 def pad_matmul_vec4(ctx: RewriteContext, node: onnx.NodeProto) -> bool:
-    """Pad a four-dimensional MatMul of two activations to the vec4 kernel.
-
-    onnxruntime's WebGPU MatMul takes its vec4 kernel when K and N are
-    multiples of four. Zero rows and columns along K add nothing to the product,
-    and the extra output columns along N are sliced off, so every real value
-    keeps its arithmetic.
-
-    Only products with more than eight rows; those with fewer keep the fold into
-    three dimensions.
-    """
     left = ctx.shapes.get(node.input[0])
     right = ctx.shapes.get(node.input[1])
     if left is None or right is None:
@@ -301,11 +256,6 @@ def pad_matmul_vec4(ctx: RewriteContext, node: onnx.NodeProto) -> bool:
 
 
 def pad_matmul_width(ctx: RewriteContext, node: onnx.NodeProto) -> bool:
-    """Widen a constant MatMul weight to a multiple of four columns.
-
-    The extra columns are zeros and the result is sliced back, so every real
-    column keeps its arithmetic.
-    """
     weight = ctx.initializers.get(node.input[1])
     if weight is None or len(weight.dims) != RANK_2D:
         return False
@@ -471,7 +421,6 @@ def rewrite_conv(ctx: RewriteContext, node: onnx.NodeProto) -> bool:
 
 
 def pin_io_dims(graph: onnx.GraphProto, shapes: dict[str, list[int]]) -> dict:
-    """Pin symbolic graph input/output dims to the captured input shapes."""
     values: dict[str, int] = {}
     for value in graph.input:
         captured = shapes.get(value.name)

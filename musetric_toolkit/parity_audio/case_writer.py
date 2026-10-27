@@ -4,11 +4,6 @@ from typing import Any
 
 import numpy as np
 
-# One parity case on disk: every tensor is a raw little-endian file named
-# `<boundary>.<source>.bin`, and manifest.json lists them as `<boundary>@<source>`
-# with dtype and shape, next to the JSON results of the step. The musetric
-# command reads the same layout for the files it adds from the devices.
-
 TENSOR_DTYPES = {"float32": np.dtype("<f4"), "int32": np.dtype("<i4")}
 
 

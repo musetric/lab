@@ -10,7 +10,6 @@ FPS = 50
 POSTPROCESSINGS = ("minimal", "dbn")
 HEADS = ("beat", "downbeat")
 
-# The logits of a track, the beat head and the downbeat head, one value per frame.
 Logits = tuple[np.ndarray, np.ndarray]
 
 
@@ -44,12 +43,6 @@ def write_postprocessed(
     heads: Logits,
     duration: float,
 ) -> None:
-    """Write <logits>-minimal and <logits>-dbn: the beats as the app clicks them.
-
-    Each postprocessing of Beat This! picks beats from the logits, and the
-    rhythm summary of the app then folds a double-time grid, so the variant
-    holds what the metronome would play.
-    """
     from beat_this.model.postprocessor import Postprocessor  # noqa: PLC0415
 
     beat, downbeat = heads

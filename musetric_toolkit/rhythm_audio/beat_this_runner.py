@@ -4,9 +4,6 @@ import torch
 
 from musetric_toolkit.common.logger import send_message
 
-# Beat This! integration for beat and downbeat tracking.
-# Beat This! is MIT-licensed by JKU; see thirdPartyNotices.md.
-
 CHECKPOINT_FILENAME = "beat_this-final0.ckpt"
 DOWNLOAD_LABEL = "beat_this checkpoint"
 

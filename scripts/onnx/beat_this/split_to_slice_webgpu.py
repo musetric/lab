@@ -1,5 +1,4 @@
 # ruff: noqa: T201
-"""Replace static ONNX Split nodes with Slice nodes for mobile WebGPU."""
 
 from __future__ import annotations
 
@@ -17,7 +16,6 @@ def node_attribute(
     node: onnx.NodeProto,
     name: str,
 ) -> onnx.AttributeProto | None:
-    """Find an ONNX node attribute by name."""
     return next(
         (attribute for attribute in node.attribute if attribute.name == name),
         None,
@@ -25,7 +23,6 @@ def node_attribute(
 
 
 def constant_values(producers: dict[str, onnx.NodeProto], name: str) -> list[int]:
-    """Return the integer values emitted by a Constant node."""
     node = producers.get(name)
     if node is None or node.op_type != "Constant":
         raise ValueError(f"Split sizes must be a Constant node: {name}")
@@ -36,7 +33,6 @@ def constant_values(producers: dict[str, onnx.NodeProto], name: str) -> list[int
 
 
 def split_axis(node: onnx.NodeProto) -> int:
-    """Read the axis attribute with ONNX's default."""
     attribute = node_attribute(node, "axis")
     return attribute.i if attribute is not None else 0
 
@@ -45,7 +41,6 @@ def unused_split_size_constants(
     graph: onnx.GraphProto,
     producers: dict[str, onnx.NodeProto],
 ) -> set[int]:
-    """Collect Constant nodes only consumed as Split-size operands."""
     consumers: dict[str, list[onnx.NodeProto]] = {}
     for node in graph.node:
         for input_name in node.input:
@@ -68,7 +63,6 @@ def make_slices(
     node: onnx.NodeProto,
     sizes: list[int],
 ) -> tuple[list[onnx.NodeProto], list[onnx.TensorProto]]:
-    """Create static Slice nodes for all outputs of one Split node."""
     axis = split_axis(node)
     offset = 0
     slices: list[onnx.NodeProto] = []
@@ -100,7 +94,6 @@ def make_slices(
 
 
 def replace_splits(model: onnx.ModelProto) -> int:
-    """Lower every fixed-size Split into equivalent static Slice operations."""
     graph = model.graph
     producers = {output: node for node in graph.node for output in node.output}
     removed_node_ids = unused_split_size_constants(graph, producers)
@@ -131,7 +124,6 @@ def replace_splits(model: onnx.ModelProto) -> int:
 
 
 def main() -> None:
-    """Write a WebGPU-safe Beat This! ONNX model."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)

@@ -1,20 +1,3 @@
-"""Generate the versioned sparse librosa CQT plan consumed by @musetric/cqt.
-
-The artifact contains the six per-octave CSR FFT bases used by the frozen
-ChordMini feature contract and a selected 255-tap Kaiser half-band prototype.
-The CQT basis is generated from librosa 0.11.0 private helpers intentionally:
-they are the implementation used by ``librosa.cqt`` itself. The resampler is a
-separate candidate, not a claim that the opaque ``soxr_hq`` coefficients were
-exported.
-
-All destination paths are explicit so exporting cannot silently update a stale
-artifact:
-
-    uv run python scripts/onnx/chordmini/generate_cqt_plan.py \
-      --out <plan.bin> --manifest <plan.json> \
-      --typescript-payload <packages/cqt/src/cqt/__test__/planPayload.ts>
-"""
-
 # ruff: noqa: T201
 
 from __future__ import annotations

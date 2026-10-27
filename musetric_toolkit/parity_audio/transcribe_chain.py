@@ -8,19 +8,6 @@ from musetric_toolkit.common.logger import send_message
 from musetric_toolkit.parity_audio.case_writer import CaseWriter
 from musetric_toolkit.parity_audio.host_audio import POWER, read_mono
 
-# The transcription step at the level of one chunk: the host sends the lead stem
-# as the power downmix at 16 kHz, and the product decodes a chunk of up to 30 s
-# with the pinned ONNX pair through transformers.js
-# (packages/ai/src/runtime/whisper/whisperDecoder.ts): log-mel features padded
-# to 30 s, the q4 encoder, then greedy decoding with timestamps by the fp16
-# merged decoder and its cache, with a token budget, and a time for every token
-# from the alignment heads' cross-attention cropped to the chunk. The original
-# is openai/whisper-large-v3-turbo in torch, and the author runs its `generate`
-# with the model's own defaults. The decoder is compared under teacher forcing,
-# one token per step with the cache as the product runs it. The token times of
-# the reference follow transformers.js (`_extract_token_timestamps`) on the
-# torch cross-attention; the author's times are not compared.
-
 SAMPLE_RATE = 16000
 CHUNK_SAMPLES = 30 * SAMPLE_RATE
 ENCODER_POSITION_SAMPLES = 320
@@ -43,7 +30,6 @@ def js_round(value: float) -> int:
 
 
 def decode_budget(samples: int) -> tuple[int, int]:
-    """The product's encoder positions of the chunk and its token budget."""
     positions = min(ENCODER_POSITIONS, js_round(samples / ENCODER_POSITION_SAMPLES))
     seconds = samples / SAMPLE_RATE
     budget = min(
@@ -63,7 +49,6 @@ def cpu_session(path: Path) -> ort.InferenceSession:
 
 
 def generated_tokens(tokens: list[int], timestamp_begin: int) -> list[int]:
-    """Tokens from the first timestamp on, without the closing end of text."""
     start = next(
         (index for index, token in enumerate(tokens) if token >= timestamp_begin),
         len(tokens),
@@ -73,8 +58,6 @@ def generated_tokens(tokens: list[int], timestamp_begin: int) -> list[int]:
 
 
 def text_rows(tokens: list[int], times: list[float]) -> np.ndarray:
-    """[tokens, 2]: each text token, the words the user sees, and its time
-    rounded as the product rounds it; special and timestamp tokens are left out."""
     rows = [
         (token, js_round(time * 100) / 100)
         for token, time in zip(tokens, times, strict=True)
@@ -84,7 +67,6 @@ def text_rows(tokens: list[int], times: list[float]) -> np.ndarray:
 
 
 def median_filter(row: np.ndarray, width: int) -> np.ndarray:
-    """transformers.js `medianFilter`: mirrored edges, the middle of each window."""
     half = width // 2
     length = row.shape[0]
     index = np.abs(np.arange(length)[:, None] + np.arange(-half, half + 1)[None, :])
@@ -93,7 +75,6 @@ def median_filter(row: np.ndarray, width: int) -> np.ndarray:
 
 
 def dynamic_time_warping(matrix: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """transformers.js `dynamic_time_warping`, ties resolved the same way."""
     rows, columns = matrix.shape
     cost = np.full((rows + 1, columns + 1), np.inf)
     cost[0, 0] = 0
@@ -129,7 +110,6 @@ def dynamic_time_warping(matrix: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 def token_times(
     cross_attentions, heads: list[list[int]], positions: int, prompt_length: int
 ) -> np.ndarray:
-    """The time of every generated token, as transformers.js computes it."""
     weights = np.stack(
         [
             cross_attentions[layer][0, head, :, :positions].float().cpu().numpy()
@@ -160,7 +140,6 @@ def empty_past(session: ort.InferenceSession) -> dict[str, np.ndarray]:
 def cross_past(
     cross: ort.InferenceSession, states: np.ndarray
 ) -> dict[str, np.ndarray]:
-    """The encoder states projected into the cache, as the flat step reads them."""
     names = [output.name for output in cross.get_outputs()]
     values = cross.run(names, {"encoder_hidden_states": states})
     return {
@@ -176,12 +155,6 @@ def teacher_forced_onnx(
     prompt_length: int,
     cross: ort.InferenceSession | None = None,
 ) -> np.ndarray:
-    """Logits of every position but the last, as transformers.js runs the decoder.
-
-    A merged decoder takes the prompt in one step without a cache, then one token
-    per step. A flat step has no first branch: `cross` projects the encoder states
-    into the cache once, and the prompt goes through the step one token at a time.
-    """
     past = empty_past(session)
     names = [output.name for output in session.get_outputs()]
     states = encoder_states.astype(np.float32)
@@ -261,13 +234,11 @@ def run(args, writer: CaseWriter) -> None:
 
     send_message({"type": "progress", "progress": 0.1})
     model = load_original(device)
-    # The times of the torch model read its own alignment heads, not the bundle's.
     config.alignment_heads = model.generation_config.alignment_heads
     features_t = torch.from_numpy(features).to(device)
     with torch.inference_mode():
         encoded = model.model.encoder(features_t).last_hidden_state
     writer.tensor("encoder.output", "original", encoded.double().cpu().numpy())
-    # `generate` and the forward pass take the encoder output computed above.
     encoder_outputs = BaseModelOutput(last_hidden_state=encoded)
     encoder = cpu_session(Path(args.onnx))
     (onnx_encoded,) = encoder.run(["last_hidden_state"], {"input_features": features})

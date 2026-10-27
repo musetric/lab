@@ -1,21 +1,3 @@
-"""Validate the exported Beat This! graph against the torch reference.
-
-For each audio file in --audio it compares beat and downbeat times from:
-  * the reference pipeline (`File2Beats`, unpatched torch),
-  * the exported graph, run under onnxruntime with the same audio loading,
-    log-mel front end, chunking and postprocessing.
-
-Everything except the network is shared, so the reported difference is the
-export itself. The WebGPU log-mel that replaces the reference front end in
-production is validated on the runtime side, against a spectrogram dumped from
-this same torch reference. Run it on the material production feeds the model —
-the instrumental stem.
-
-    uv run --group export python scripts/onnx/beat_this/validate_beat_this.py \
-      --onnx <export-dir>/beat_this.onnx --audio <audio-dir> \
-      --models-path <checkpoint-cache-dir>
-"""
-
 # ruff: noqa: T201
 
 import argparse
@@ -40,7 +22,6 @@ STEREO_NDIM = 2
 
 
 def load_mono(path: Path) -> np.ndarray:
-    """Load a track the way the reference Audio2Frames does."""
     import soxr  # noqa: PLC0415
     from beat_this.preprocessing import load_audio  # noqa: PLC0415
 
@@ -53,7 +34,6 @@ def load_mono(path: Path) -> np.ndarray:
 
 
 def run_onnx(session: ort.InferenceSession, spect: torch.Tensor):
-    """Return postprocessed beat and downbeat times from the exported graph."""
     from beat_this.inference import aggregate_prediction, split_piece  # noqa: PLC0415
     from beat_this.model.postprocessor import Postprocessor  # noqa: PLC0415
 
@@ -80,7 +60,6 @@ def run_onnx(session: ort.InferenceSession, spect: torch.Tensor):
 
 
 def compare(reference: np.ndarray, exported: np.ndarray) -> str:
-    """Describe how two beat-time arrays differ."""
     if len(reference) != len(exported):
         return f"COUNT {len(reference)} vs {len(exported)}"
     if len(reference) == 0:
@@ -89,7 +68,6 @@ def compare(reference: np.ndarray, exported: np.ndarray) -> str:
 
 
 def summarize(times: np.ndarray, downbeats: np.ndarray) -> str:
-    """Render the CLI-visible rhythm summary for a track."""
     beats = np.asarray(times)
     bpm = estimate_bpm(beats)
     meter = estimate_meter(beats, np.asarray(downbeats))
@@ -97,7 +75,6 @@ def summarize(times: np.ndarray, downbeats: np.ndarray) -> str:
 
 
 def main() -> None:
-    """Compare exported graphs and torch reference over a directory of audio."""
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--onnx",

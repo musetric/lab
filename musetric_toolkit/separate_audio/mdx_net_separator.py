@@ -14,9 +14,6 @@ from musetric_toolkit.separate_audio.ffmpeg.read import read_audio_file
 from musetric_toolkit.separate_audio.ffmpeg.write import write_audio_file
 
 
-# MDX inference, chunking, and STFT tensor layout are adapted from the
-# Ultimate Vocal Remover GUI / MDX-Net implementation (MIT) and DeepExtract
-# (MIT). See thirdPartyNotices.md for attribution.
 class STFT:
     def __init__(self, n_fft: int, hop_length: int, dim_f: int, device: torch.device):
         self.n_fft = n_fft

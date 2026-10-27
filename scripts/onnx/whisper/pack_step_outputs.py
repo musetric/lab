@@ -1,25 +1,3 @@
-"""Hand the host everything a decoder step reads in one tensor.
-
-A step of generation reads back the logits and the cross-attention weights of
-every layer an alignment head lives in. This appends one float32 output,
-`step_outputs`, that concatenates the logits and those attention layers, each
-flattened, in that order. The original outputs stay in the graph, so a caller
-that does not know about the packed one is
-unaffected; a caller that fetches only `step_outputs` and the key/value cache
-reads one tensor per step and cuts it back into the pieces from their shapes:
-
-    logits          [batch, tokens, vocabulary]
-    cross_attentions.L  [batch, heads(L), tokens, encoder positions]
-
-Run it after `trim_cross_attentions.py`, which decides how many heads each layer
-keeps and writes the layers the alignment heads use into the generation config.
-
-    uv run python scripts/onnx/whisper/pack_step_outputs.py \
-      --input  decoder_model_merged_fp16.onnx \
-      --output decoder_model_merged_fp16.onnx \
-      --generation-config generation_config.json
-"""
-
 # ruff: noqa: T201
 
 import argparse

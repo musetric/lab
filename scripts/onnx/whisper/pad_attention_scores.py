@@ -1,27 +1,3 @@
-"""Keep the decoder's attention scores off the WebGPU MatMul kernel Adreno 600 breaks.
-
-The WebGPU execution provider multiplies `A [batch, M, K] x B [batch, K, N]` with
-a packed vec4 shader whenever both `K` and `N` are multiples of four, which
-Adreno 600-series adapters get wrong when `M` is small, as in a decoder
-(musetric/musetric#886).
-
-The attention score is `MatMul(Q, Transpose(K, perm=[0, 2, 1]))`. This appends
-one zero column to `Q` and one zero row to the transposed key, so the product
-runs with `K = 65`:
-
-    scores = MatMul(Pad(Q, [0, 0, 0, 0, 0, 1]), Pad(Kt, [0, 0, 0, 0, 1, 0]))
-
-65 is never a multiple of four, so the provider takes its scalar kernel, which
-is exact on the same device. The added row and column multiply to zero, so every
-score is the number it was, and the output keeps its shape: no slice afterwards.
-
-Both paddings are constants, so no shape arithmetic runs around each attention.
-
-    uv run python scripts/onnx/whisper/pad_attention_scores.py \
-      --input  decoder_model_merged_fp16.onnx \
-      --output decoder_model_merged_fp16.onnx
-"""
-
 # ruff: noqa: T201
 
 import argparse
@@ -42,7 +18,6 @@ PAD_PREFIX = "pad_attention_scores"
 
 
 def subgraphs(graph):
-    """The graph itself and every graph nested in its nodes' attributes."""
     yield graph
     for node in graph.node:
         for attribute in node.attribute:
@@ -54,7 +29,6 @@ def subgraphs(graph):
 
 
 def attention_scores(graph):
-    """MatMul nodes whose right operand is a key tensor transposed to [batch, K, N]."""
     producers = {output: node for node in graph.node for output in node.output}
     found = []
     for node in graph.node:
@@ -72,12 +46,10 @@ def attention_scores(graph):
 
 
 def count_affected(model):
-    """Attention score products that still reach the packed kernel."""
     return sum(len(attention_scores(graph)) for graph in subgraphs(model.graph))
 
 
 def rewrite(graph, index):
-    """Widen the head dimension of each attention score product by one."""
     targets = attention_scores(graph)
     if not targets:
         return 0

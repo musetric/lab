@@ -1,33 +1,3 @@
-"""Export S-KEY (harmonic VQT + ChromaNet) to a single self-contained ONNX.
-
-The graph is `audio -> 24 key probabilities`, baking the whole run_skey pipeline
-so the browser/node side needs no DSP of its own:
-
-    raw audio [1, N] @ 22050 Hz mono, peak-normalized
-      -> nnAudio harmonic VQT (log-amplitude HCQT)     [1, 1, 99, T]
-      -> crop 84 bins (CropCQT, transpose 0)           [1, 1, 84, T]
-      -> ChromaNet (ConvNeXt stack -> chroma -> 24)     [1, 24] (softmax'd)
-      -> mean over batch -> softmax                     [24]
-
-Two vendored ops are swapped for numerically identical ONNX-exportable
-equivalents that tolerate a dynamic time axis (the model is fed the whole track
-at once):
-
-  * `nn.functional.layer_norm(x, x.shape[1:])` (affine-free) -> explicit
-    reduction.
-  * `AdaptiveAvgPool2d((12, 1))` -> mean over the time axis (input H is already
-    12 chroma bins).
-
-`validate_skey.py` checks the export against the torch pipeline.
-
-TRACE_SECONDS sizes the dummy clip used to trace the dynamic axes; it must stay
-long enough to survive ChromaNet's seven time-downsampling stages (each halves
-the time axis).
-
-    uv run --group export python scripts/onnx/skey/export_skey.py \
-      --out <export-dir> --models-path <checkpoint-cache-dir>
-"""
-
 # ruff: noqa: T201
 
 import argparse

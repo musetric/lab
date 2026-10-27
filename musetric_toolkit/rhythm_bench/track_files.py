@@ -4,13 +4,6 @@ AUDIO_SUFFIXES = {".flac", ".wav", ".mp3", ".ogg", ".m4a"}
 
 
 def track_files(audio_path: str, file_name: str | None) -> dict[str, Path]:
-    """Map track names to audio files.
-
-    A file is one track named by its stem. In a directory, every audio file
-    directly inside is a track named by its stem; with `file_name`, every
-    subdirectory holding a file of that name is a track named by the
-    subdirectory, as in a corpus of `<song>/instrumental.flac` stems.
-    """
     path = Path(audio_path)
     if path.is_file():
         return {path.stem: path}

@@ -1,12 +1,3 @@
-"""Build the FULL separation ONNX graph: raw stereo audio -> vocals, with STFT,
-the NN core, mask-apply and iSTFT all inside one graph; --core-only builds the
-NN core alone.
-
-STFT/iSTFT are Conv1d / ConvTranspose1d with precomputed window x DFT-basis
-weights, not torch.stft/istft. Mask-apply uses real-arithmetic scatter_add.
-The NN core (`net_forward`) is reused unchanged.
-"""
-
 # ruff: noqa: T201
 
 import argparse
@@ -37,26 +28,17 @@ from musetric_toolkit.separate_audio.roformer_utils import dict_to_namespace
 N_FFT = 2048
 HOP = 441
 WIN = 2048
-# Attention head layout of the model: heads=8, dim_head=64 -> dim_inner=512.
 HEADS = 8
 HEAD_DIM = 64
-HIDDEN = HEADS * HEAD_DIM  # 512
-T = 1100  # default frame count, the published window; override with --frames
-TSAMP = HOP * (T - 1)  # 484659
-PAD = N_FFT // 2  # 1024
-FREQS = N_FFT // 2 + 1  # 1025
-PACKED = FREQS * 2  # 2050
-# RMSNorm epsilon: the model's RMSNorm is F.normalize(x, dim=-1) =
-# x/max(||x||_2, 1e-12), so the ONNX form x/sqrt(mean(x^2)+eps) takes the smallest
-# epsilon it can carry.
+HIDDEN = HEADS * HEAD_DIM
+T = 1100
+TSAMP = HOP * (T - 1)
+PAD = N_FFT // 2
+FREQS = N_FFT // 2 + 1
+PACKED = FREQS * 2
 RMSNORM_EPS = 1e-12
-# A normalization in fp16 casts 1/sqrt(mean(x^2)+eps) to fp16, so its epsilon
-# must stay above FP16_RSQRT_FLOOR.
 RMSNORM_EPS_FP16 = 1e-9
-FP16_RSQRT_FLOOR = 1.0 / 65504.0**2  # 2.33e-10
-# No onnxruntime WebGPU row kernel (the normalizations, Softmax, LpNormalization,
-# TopK, InstanceNormalization, Reduce*) may see more rows than this
-# (musetric/musetric#885).
+FP16_RSQRT_FLOOR = 1.0 / 65504.0**2
 WEBGPU_DISPATCH_ROWS = 65535
 LEADING_AXES_OPS = frozenset(
     {"LayerNormalization", "RMSNormalization", "SimplifiedLayerNormalization"}
@@ -93,7 +75,6 @@ def hann_periodic() -> np.ndarray:
 
 
 def stft_conv_weight() -> torch.Tensor:
-    # [2050,1,2048]: out bins 0..1024 = Re, 1025..2049 = Im (per channel).
     window = hann_periodic()
     n = np.arange(N_FFT)
     f = np.arange(FREQS)
@@ -105,7 +86,6 @@ def stft_conv_weight() -> torch.Tensor:
 
 
 def istft_conv_weight() -> torch.Tensor:
-    # [2050,1,2048]: in bins 0..1024 = Re, 1025..2049 = Im; folds synthesis window.
     window = hann_periodic()
     n = np.arange(N_FFT)
     k = np.arange(FREQS)
@@ -128,7 +108,6 @@ def window_envelope() -> torch.Tensor:
 
 
 class FullSeparator(nn.Module):
-    """raw_audio [1,2,TSAMP] -> vocals [1,2,TSAMP], all real ops."""
 
     def __init__(self, model: MelBandRoformer):
         super().__init__()
@@ -136,46 +115,39 @@ class FullSeparator(nn.Module):
         self.register_buffer("stft_w", stft_conv_weight())
         self.register_buffer("istft_w", istft_conv_weight())
         self.register_buffer("env", window_envelope())
-        # denom[2050] = num_bands_per_freq repeated per channel (s inner).
-        nbpf = model.num_bands_per_freq.float()  # [1025]
-        denom = nbpf.repeat_interleave(2).clamp(min=1e-8)  # [2050]
+        nbpf = model.num_bands_per_freq.float()
+        denom = nbpf.repeat_interleave(2).clamp(min=1e-8)
         self.register_buffer("denom", denom)
-        self.register_buffer("freq_indices", model.freq_indices.long())  # [3958]
+        self.register_buffer("freq_indices", model.freq_indices.long())
 
     def stft(self, raw_audio: torch.Tensor) -> torch.Tensor:
-        # [1,2,TSAMP] -> stft_repr [1,2050,T,2] packed (f*2+s, c=re/im).
         x = raw_audio.reshape(2, 1, TSAMP)
         x = F.pad(x, (PAD, PAD), mode="reflect")
-        y = F.conv1d(x, self.stft_w, stride=HOP)  # [2,2050,T]  (re0..1024,im0..1024)
-        y = y.reshape(1, 2, 2, FREQS, T)  # b, ch, reim, f, T
-        y = y.permute(0, 3, 1, 4, 2)  # b, f, ch, T, reim
+        y = F.conv1d(x, self.stft_w, stride=HOP)
+        y = y.reshape(1, 2, 2, FREQS, T)
+        y = y.permute(0, 3, 1, 4, 2)
         return y.reshape(1, PACKED, T, 2)
 
     def apply_mask_istft(
         self, stft_repr: torch.Tensor, masks: torch.Tensor
     ) -> torch.Tensor:
-        # stft_repr [1,2050,T,2]; masks [1,1,3958,T,2] -> vocals [1,2,TSAMP].
-        masks = masks.reshape(1, self.freq_indices.shape[0], T, 2)  # [1,3958,T,2]
+        masks = masks.reshape(1, self.freq_indices.shape[0], T, 2)
         index = self.freq_indices.view(1, -1, 1, 1).expand_as(masks)
         summed = torch.zeros(
             1, PACKED, T, 2, dtype=masks.dtype, device=masks.device
-        ).scatter_add(
-            1, index, masks
-        )  # [1,2050,T,2]
+        ).scatter_add(1, index, masks)
         averaged = summed / self.denom.view(1, PACKED, 1, 1)
         sr, si = stft_repr[..., 0], stft_repr[..., 1]
         mr, mi = averaged[..., 0], averaged[..., 1]
         out_r = sr * mr - si * mi
-        out_i = sr * mi + si * mr  # [1,2050,T]
-        # [1,2050,T] (f*2+s) -> [2(s),2050(re/im),T] for conv_transpose
+        out_i = sr * mi + si * mr
         rr = out_r.reshape(1, FREQS, 2, T)
         ii = out_i.reshape(1, FREQS, 2, T)
-        re = rr.permute(0, 2, 1, 3).reshape(2, FREQS, T)  # [s, f, T]
+        re = rr.permute(0, 2, 1, 3).reshape(2, FREQS, T)
         im = ii.permute(0, 2, 1, 3).reshape(2, FREQS, T)
-        stacked = torch.cat([re, im], dim=1)  # [2, 2050, T]
-        # iSTFT as ConvTranspose1d (iDFT + synthesis-window + overlap-add fused).
-        y = F.conv_transpose1d(stacked, self.istft_w, stride=HOP)  # [2,1,..]
-        y = y[:, 0, PAD : PAD + TSAMP] / self.env  # [2, TSAMP]
+        stacked = torch.cat([re, im], dim=1)
+        y = F.conv_transpose1d(stacked, self.istft_w, stride=HOP)
+        y = y[:, 0, PAD : PAD + TSAMP] / self.env
         return y.reshape(1, 2, TSAMP)
 
     def forward(self, raw_audio: torch.Tensor) -> torch.Tensor:
@@ -185,11 +157,6 @@ class FullSeparator(nn.Module):
 
 
 def set_attention_block(model: MelBandRoformer, q_block: int) -> int:
-    """Split the query axis of every attention layer into q_block-row chunks.
-
-    Exact, not an approximation — see Attend.forward. Only the six time-attention
-    layers are blocked; the band attentions, over a sequence of 60, stay whole.
-    """
     count = 0
     for m in model.modules():
         if isinstance(m, Attend):
@@ -199,12 +166,6 @@ def set_attention_block(model: MelBandRoformer, q_block: int) -> int:
 
 
 class RowChunkedFeedForward(nn.Module):
-    """Run a feed-forward block over row chunks instead of the whole activation.
-
-    Exact, and exact in fp16 too: rows of a matmul are independent, so every
-    output row is produced by the same arithmetic as before. Chunking also keeps
-    the wide [rows, 1536] intermediate from being materialized at full height.
-    """
 
     def __init__(self, net: nn.Sequential, parts: int, dim: int = 0) -> None:
         super().__init__()
@@ -218,11 +179,6 @@ class RowChunkedFeedForward(nn.Module):
 
 
 class RowChunkedLinear(nn.Module):
-    """Run a linear projection over row chunks instead of the whole activation.
-
-    Exact for the same reason as RowChunkedFeedForward: every output row comes
-    from the same arithmetic.
-    """
 
     def __init__(self, linear: nn.Module, parts: int) -> None:
         super().__init__()
@@ -234,7 +190,6 @@ class RowChunkedLinear(nn.Module):
 
 
 def _attention_forward_unfused(self: Attention, x: torch.Tensor) -> torch.Tensor:
-    """Attention.forward with the fused qkv projection replaced by three."""
     x = self.norm(x)
     q = rearrange(self.to_q(x), "b n (h d) -> b h n d", h=self.heads)
     k = rearrange(self.to_k(x), "b n (h d) -> b h n d", h=self.heads)
@@ -252,14 +207,6 @@ def _attention_forward_unfused(self: Attention, x: torch.Tensor) -> torch.Tensor
 def split_heavy_projections(
     model: MelBandRoformer, parts: int, projection_parts: int = 1
 ) -> tuple[int, int]:
-    """Cut the two longest matmuls of every transformer layer into shorter ones.
-
-    Feed-forwards are chunked by rows into `parts`. The fused qkv projection is
-    replaced by the three projections the following rearrange splits it into
-    anyway, so nothing downstream wants the fused tensor back.
-
-    Both rewrites are exact and neither adds a Concat over a wide activation.
-    """
     feeds = 0
     for module in list(model.modules()):
         if isinstance(module, FeedForward):
@@ -292,22 +239,6 @@ def split_heavy_projections(
 
 
 def set_stream_slabs(model: MelBandRoformer, slabs: int) -> None:
-    """Run every time and band transformer over slabs of the stream, kept as rows.
-
-    Exact, fp16 included: nothing in a transformer layer reduces over its batch
-    axis, so every slab gets the arithmetic it got as part of the whole.
-
-    The time transformer takes the bands in `slabs` slabs and the band
-    transformer the frames, each slab cut straight from the [b, t, f, d] stream
-    and held as [1, rows, d]; with `slabs` dividing both 60 and T a band slab and
-    a frame slab have the same rows, so the norms, projections, feed-forwards and
-    residual adds of both transformers produce the same shapes and share their
-    buffers. Only the [b, h, n, d] view inside attention differs. The stream stays
-    3-D, so every Linear stays a MatMul and an Add.
-
-    Needs --split-rows: the slabs use the unfused q, k and v projections, and the
-    feed-forward row groups are cut along the rows axis.
-    """
     for module in model.modules():
         if isinstance(module, RowChunkedFeedForward):
             module.dim = 1
@@ -319,7 +250,6 @@ def set_stream_slabs(model: MelBandRoformer, slabs: int) -> None:
 def _stream_slab_net_forward(
     model: MelBandRoformer, stft_repr: torch.Tensor, slabs: int
 ) -> torch.Tensor:
-    """MelBandRoformer.net_forward with the transformer loop over stream slabs."""
     batch = stft_repr.shape[0]
     freq_indices = model.freq_indices.to(stft_repr.device)
     batch_arange = torch.arange(batch, device=stft_repr.device)[..., None]
@@ -348,7 +278,6 @@ def _stream_slab_net_forward(
 def _transformer_over_rows(
     transformer: Transformer, x: torch.Tensor, batch: int
 ) -> torch.Tensor:
-    """Transformer.forward on a [1, batch * n, d] stream."""
     for attn, ff in transformer.layers:
         x = _attention_over_rows(attn, x, batch) + x
         x = ff(x) + x
@@ -356,7 +285,6 @@ def _transformer_over_rows(
 
 
 def _attention_over_rows(attn: Attention, x: torch.Tensor, batch: int) -> torch.Tensor:
-    """The unfused Attention.forward on a [1, batch * n, d] stream."""
     x = attn.norm(x)
     q = rearrange(attn.to_q(x), "o (b n) (h d) -> (o b) h n d", b=batch, h=attn.heads)
     k = rearrange(attn.to_k(x), "o (b n) (h d) -> (o b) h n d", b=batch, h=attn.heads)
@@ -371,12 +299,6 @@ def _attention_over_rows(attn: Attention, x: torch.Tensor, batch: int) -> torch.
 
 
 class RowChunkedRMSNorm(nn.Module):
-    """Run an RMSNorm over batch chunks once its rows pass WEBGPU_DISPATCH_ROWS.
-
-    Exact, fp16 included: every row is normalized on its own. The transformers
-    normalize [60, T, 384] and [T, 60, 384], 66000 rows each at T=1100, which
-    two chunks bring under the cap; every other norm of the model stays whole.
-    """
 
     def __init__(self, norm: RMSNorm) -> None:
         super().__init__()
@@ -391,14 +313,6 @@ class RowChunkedRMSNorm(nn.Module):
 
 
 def cap_dispatch_rows(model: MelBandRoformer) -> tuple[int, int]:
-    """Keep every normalization and softmax under WEBGPU_DISPATCH_ROWS rows.
-
-    Norms are wrapped and chunk themselves when their input is too tall. Softmax
-    lives inside Attend, which chunks the score tensor over its batch axis right
-    before the softmax and leaves the matmuls around it whole. Chunks are computed
-    from the static export shapes, so the graph only gains Split/Concat where a
-    kernel would otherwise overflow.
-    """
     norms = 0
     for module in list(model.modules()):
         for name, child in list(module.named_children()):
@@ -433,8 +347,8 @@ def gate1(model: MelBandRoformer, full: FullSeparator) -> None:
     torch.manual_seed(0)
     x = torch.randn(1, 2, TSAMP) * 0.1
     with torch.no_grad():
-        ref = model(x)  # original forward (torch.stft/istft, complex)
-        got = full(x)  # conv-based, real-arithmetic
+        ref = model(x)
+        got = full(x)
     if ref.shape != got.shape:
         print(f"shape mismatch: ref {tuple(ref.shape)} vs got {tuple(got.shape)}")
     snr = snr_db(ref, got)
@@ -577,12 +491,10 @@ def main() -> None:
         f"capped dispatch rows at {WEBGPU_DISPATCH_ROWS} over {norms} norms "
         f"and {attends} attention layers"
     )
-    # warm RotaryEmbedding cache at T (decode path mutates it on first call)
     with torch.no_grad():
         model.net_forward(torch.randn(1, PACKED, T, 2))
 
     if args.core_only:
-        # web-backend core: net_forward only; STFT/iSTFT live host-side in @musetric/fft
         net = Core(model).eval()
         if args.check:
             return
@@ -616,13 +528,6 @@ def main() -> None:
 
 
 class Core(nn.Module):
-    """Core boundary: stft_repr [1,2050,T,2] -> per-bin masks [1,2050,T,2].
-
-    net_forward emits per-band masks [1,1,3958,T,2]; this tail gathers them onto
-    the 2050 packed freq bins (fan-in <=2 per bin) and divides by the per-bin band
-    count, so the published core needs no host-side band tables. It is a Gather +
-    Add + Div formulation, not scatter_add.
-    """
 
     def __init__(self, model: MelBandRoformer):
         super().__init__()
@@ -651,9 +556,9 @@ class Core(nn.Module):
 
     def forward(self, stft_repr: torch.Tensor) -> torch.Tensor:
         masks = self.model.net_forward(stft_repr)
-        masks = masks.reshape(1, -1, masks.shape[-2], 2)  # [1,3958,T,2]
-        g0 = masks.index_select(1, self.pair0)  # [1,2050,T,2]
-        g1 = masks.index_select(1, self.pair1)  # [1,2050,T,2]
+        masks = masks.reshape(1, -1, masks.shape[-2], 2)
+        g0 = masks.index_select(1, self.pair0)
+        g1 = masks.index_select(1, self.pair1)
         summed = g0 * self.valid0 + g1 * self.valid1
         return (summed / self.denom).float()
 
@@ -669,7 +574,6 @@ def export(  # noqa: C901, PLR0912, PLR0913, PLR0915
     import time  # noqa: PLC0415
     from collections import Counter  # noqa: PLC0415
 
-    # --all-fp16 is the only mode that leaves the normalization in fp16.
     rms_eps = RMSNORM_EPS_FP16 if all_fp16 and not fp32 else RMSNORM_EPS
     output.parent.mkdir(parents=True, exist_ok=True)
     raw = output.with_name(f"{output.stem}_raw.onnx")
@@ -727,16 +631,9 @@ def export(  # noqa: C901, PLR0912, PLR0913, PLR0915
     print(f"  folded {folded} rotary Cos/Sin tables into constants")
 
     if fp32:
-        # Full-fp32 variant (experiment): no fp16 conversion, so no fp16<->fp32
-        # boundary Casts at all. save_fp16 just writes external data (dtype-
-        # agnostic). Doubles activation/weight bytes -> expect slower on the
-        # memory-bound majority + higher VRAM (paging risk on small cards).
         print("keeping FP32 (no fp16 conversion) ...")
         save_fp16(proto, output)
     else:
-        # Keep the DSP (STFT/iSTFT framing) and, unless --all-fp16, the RMSNorm
-        # chain (ReduceL2/Clip/Div or RMSNormalization) + Softmax in fp32;
-        # everything else (the NN core MatMul/Gemm) -> fp16.
         extra_block = (
             ["Conv", "ConvTranspose", "Pad"]
             if all_fp16
@@ -812,9 +709,6 @@ def _sole_consumer(consumers, name):
 
 
 def _rewrite_nodes(graph, remove: set, replace_at: dict) -> None:
-    """Drop nodes in `remove`; where a kept node's name is a key of `replace_at`,
-    emit the replacement node(s) (a node or a list, in order) at that position
-    first (keeps topo order)."""
     nodes = list(graph.node)
     del graph.node[:]
     for n in nodes:
@@ -828,11 +722,6 @@ def _rewrite_nodes(graph, remove: set, replace_at: dict) -> None:
 
 
 def fold_rotary_tables(graph) -> int:
-    """Replace every Cos/Sin of a constant Slice with its value, computed in fp32.
-
-    The angles of the rotary embedding never reach fp16; only the cosines and
-    sines do.
-    """
     from onnx import numpy_helper  # noqa: PLC0415
 
     producer, _ = _io_maps(graph)
@@ -881,17 +770,6 @@ def _ensure_ms_opset(model) -> None:
 
 
 def fuse_rmsnorm(graph, epsilon: float) -> int:
-    """RMSNorm chain -> standard ONNX RMSNormalization (opset 23, fp32-internal
-        accumulation). Pattern (fp32): x -> ReduceL2(x) -> Clip(min=eps) -> Expand ->
-        Div(x, .) -> Mul(sqrt_dim const) -> Mul(gamma). RMSNormalization(X, scale) =
-        X / sqrt(mean(X^2)+eps) * scale, so scale = gamma and the sqrt_dim factor
-        folds away (mean vs sum). Caller bumps the onnx opset import to 23.
-
-    epsilon is RMSNORM_EPS (1e-12) while the node stays fp32 and RMSNORM_EPS_FP16
-        (1e-9) once it runs in fp16; pass the one that matches how this graph will
-        be converted. The default export keeps the node fp32 (it is in export()'s
-        op_block_list); --all-fp16 drops that pin.
-    """
     import onnx  # noqa: PLC0415
 
     _producer, consumers = _io_maps(graph)
@@ -970,9 +848,6 @@ def sanitize_fp16_initializers(model) -> int:
 
 
 def assert_fp16_epsilon_safe(model) -> None:
-    """Fail the build if a normalization that ended up in fp16 kept an epsilon
-    below FP16_RSQRT_FLOOR.
-    """
     import onnx  # noqa: PLC0415
 
     graph = model.graph
@@ -1000,9 +875,6 @@ def assert_fp16_epsilon_safe(model) -> None:
 
 
 def assert_dispatch_rows_safe(model) -> None:
-    """Fail the build if a row-dispatched kernel would see more rows than
-    WEBGPU_DISPATCH_ROWS, or if its input shape is not known statically.
-    """
     graph = model.graph
     shapes = {}
     for value in list(graph.value_info) + list(graph.input) + list(graph.output):
@@ -1031,9 +903,6 @@ def assert_dispatch_rows_safe(model) -> None:
 
 
 def dispatch_rows(node, dims: list[int], constants: dict) -> int | None:
-    """Rows a WebGPU kernel dispatches one workgroup each for, None when unknown.
-    The exported graph is past opset 13, so Softmax normalizes a single axis.
-    """
     import onnx  # noqa: PLC0415
 
     def attribute(name: str, default):
@@ -1068,15 +937,6 @@ def dispatch_rows(node, dims: list[int], constants: dict) -> int | None:
 
 
 def keep_band_split_fp32(model, epsilon: float) -> int:
-    """Keep the band gather and the band-split RMSNorms in fp32.
-
-    The fp16 conversion casts the spectrum to fp16 before the band gather
-    (musetric/musetric#971). Removing that Cast keeps the gather, its reshapes and
-    the norms in fp32, and each norm's unit-scale output is cast to fp16 before the
-    band Linear. The norms also take the fp32 epsilon.
-
-    Returns the number of norms moved to fp32.
-    """
     import onnx  # noqa: PLC0415
 
     graph = model.graph
@@ -1111,17 +971,6 @@ def keep_band_split_fp32(model, epsilon: float) -> int:
 
 
 def keep_time_attention_fp32(model, frames: int) -> int:
-    """Run the softmax and the probabilities x values of every time attention in fp32.
-
-    The time attentions normalize over the `frames` keys of the window
-    (musetric/musetric#988). The scores are cast to fp32 for the softmax, the
-    values to fp32 for the matmul with the probabilities, and its output back to
-    fp16. The attention's scale, a power of two, moves from the scores onto the
-    queries first, which is exact and leaves no fp16 copy of the scaled scores. The
-    band attentions normalize over 60 bands and keep fp16.
-
-    Returns the number of time attentions rewritten.
-    """
     import onnx  # noqa: PLC0415
     from onnx import numpy_helper  # noqa: PLC0415
 
@@ -1211,7 +1060,6 @@ def keep_time_attention_fp32(model, frames: int) -> int:
 
 
 def _band_split_front(producer: dict, norms: list) -> tuple[set, object]:
-    """The nodes between the input's fp16 Cast and the band norms, and the Cast."""
     front, casts, stack = set(), {}, [n.input[0] for n in norms]
     while stack:
         node = producer[stack.pop()]
@@ -1231,7 +1079,6 @@ def _band_split_front(producer: dict, norms: list) -> tuple[set, object]:
 
 
 def _band_norm_to_fp32(norm, inits: dict, graph, epsilon: float) -> list:
-    """The norm on an fp32 gamma and epsilon, then a Cast of its output to fp16."""
     import onnx  # noqa: PLC0415
     from onnx import numpy_helper  # noqa: PLC0415
 

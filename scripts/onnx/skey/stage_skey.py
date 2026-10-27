@@ -1,14 +1,3 @@
-"""Stage the exported S-KEY file set for publishing.
-
-Copies the ONNX graph + config.json from the export dir into the clone of the
-model repository. The ONNX is copied verbatim; JSON text is normalized to LF so
-the staged files match what Hugging Face serves, keeping them consistent with
-the sizes and hashes the server pins.
-
-    uv run python scripts/onnx/skey/stage_skey.py \
-      --export <export-dir> --dest ../models/skey-onnx
-"""
-
 # ruff: noqa: T201
 
 import argparse

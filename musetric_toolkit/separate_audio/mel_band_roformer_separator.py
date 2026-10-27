@@ -18,9 +18,6 @@ from musetric_toolkit.separate_audio.roformer_utils import (
     dict_to_namespace,
 )
 
-# Uses the BS-RoFormer-derived MelBandRoformer implementation and compatible
-# Aname Duality checkpoint/config. See thirdPartyNotices.md for attribution.
-
 
 class MelBandRoformerSeparator:
     def __init__(
@@ -57,7 +54,6 @@ class MelBandRoformerSeparator:
             return
 
         self.config = self._load_config()
-        # a config with per-pair pooling describes the distilled student
         model_class = (
             PooledMelBandRoformer
             if hasattr(self.config.model, "pool")

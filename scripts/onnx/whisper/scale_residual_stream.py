@@ -1,37 +1,3 @@
-"""Keep the decoder's small products out of the float16 subnormal range.
-
-Three products of a decoder step are sums of terms below 2^-14, which Adreno GPUs
-compute as zero in float16: attention probabilities times values, the attention
-output times `out_proj`, and the GELU tail times `fc2` (musetric/musetric#881).
-
-The pass scales what those products read by 2^10, exactly, and folds the scale
-away where it would be seen:
-
-- the residual stream carries 2^10 x: the positional table and the token
-  embedding are scaled (one `Mul` after the embedding gather, the table is
-  shared with the logits), and so are the `out_proj` and `fc2` biases and the
-  `fc2` weights, so every addition into the stream agrees;
-- the self-attention values carry 2^10 v (`v_proj` weights and bias), so the
-  probability-times-value products and then the `out_proj` products are 2^10
-  larger;
-- each layer norm is scale-free apart from its epsilon, which takes 2^20; the
-  nine-node pattern becomes one `LayerNormalization` (opset 17) carrying that
-  epsilon as an attribute;
-- the cross-attention softmax runs in float32, feeds the `cross_attentions`
-  output as float32 straight away, and its probabilities are scaled by 2^10
-  before the cast to float16 that the value product reads, so the 2^10 lands on
-  the attention output like the self-attention one.
-
-Every scale is a power of two, so nothing changes on a GPU that keeps
-subnormals except the float32 softmax, which is more precise. The logits and
-`cross_kv_fp16.onnx` are untouched: the final layer norm removes the scale and
-the encoder keys and values are read unscaled.
-
-    uv run python scripts/onnx/whisper/scale_residual_stream.py \
-      --input  decoder_model_merged_fp16.onnx \
-      --output decoder_model_merged_fp16.onnx
-"""
-
 # ruff: noqa: T201
 
 import argparse
@@ -82,7 +48,6 @@ def initializer_input(node, initializers):
 
 
 def rewrite_cross_softmax(graph, node, scale_log2, index):
-    """Softmax in float32: out as such, and scaled to float16 for the value product."""
     consumers = [other for other in graph.node if node.output[0] in other.input]
     if len(consumers) != 1 or consumers[0].op_type != "Reshape":
         found = [c.op_type for c in consumers]
@@ -134,7 +99,6 @@ def rewrite_cross_softmax(graph, node, scale_log2, index):
             to=TensorProto.FLOAT16,
         ),
     ]
-    # The heads go out from the float32 probabilities; the output keeps its name.
     gather.input[0] = full32
     gather.output[0] = cast_out.output[0]
     graph.node.remove(cast_out)
@@ -142,8 +106,6 @@ def rewrite_cross_softmax(graph, node, scale_log2, index):
     graph.node.remove(node)
     for offset, new in enumerate(new_nodes):
         graph.node.insert(position + offset, new)
-    # The shape the reshape reads is computed after the softmax, so the float32
-    # reshape goes next to the float16 one.
     graph.node.insert(
         list(graph.node).index(reshape),
         helper.make_node(
@@ -156,7 +118,6 @@ def rewrite_cross_softmax(graph, node, scale_log2, index):
 
 
 def replace_layer_norm(graph, initializers, eps_add, eps_factor):
-    """One LayerNormalization for the nine-node pattern around the epsilon add."""
     producers = {output: node for node in graph.node for output in node.output}
     consumers = {}
     for node in graph.node:
@@ -228,7 +189,6 @@ def replace_layer_norm(graph, initializers, eps_add, eps_factor):
 
 
 def scale_embedding(graph, gather):
-    """A Mul after the token embedding gather; the table is shared with the logits."""
     scaled = f"{PREFIX}/embedding"
     for other in graph.node:
         for index in range(len(other.input)):

@@ -1,19 +1,3 @@
-"""Make the exported Whisper encoder run, and run correctly, on mobile GPUs.
-
-This applies three graph rewrites, in order, on a single load of the graph, then
-checks that the result is clear. `stage_whisper.py` runs the same check before
-it stages anything.
-
-- `block_attention` splits the attention queries into blocks, so each score
-  tensor fits the 128 MiB per storage binding that WebGPU guarantees;
-- `conv_to_matmul` and `transpose_to_gather` route the encoder around every
-  `Transpose` shape Adreno 600-series adapters get wrong (musetric/musetric#975).
-
-    uv run python scripts/onnx/whisper/mobile_encoder.py \
-      --input  tmp/whisper-export/.../onnx/encoder_model_q4.onnx \
-      --output tmp/whisper-export/.../onnx/encoder_model_q4.onnx
-"""
-
 # ruff: noqa: T201
 
 import argparse
@@ -31,7 +15,6 @@ with contextlib.suppress(Exception):
 
 
 def verify(model, query_block=block_attention.QUERY_BLOCK):
-    """Report what would still break on a mobile GPU, as a list of reasons."""
     reasons = []
 
     score_bytes = block_attention.largest_score_bytes(model)

@@ -1,7 +1,3 @@
-"""List ONNX op types in a model graph.
-Loads graph only (load_external_data=False) -> low memory, fast.
-"""
-
 # ruff: noqa: T201 -- CLI inspection tool: stdout (the op histogram) is its interface.
 
 import argparse

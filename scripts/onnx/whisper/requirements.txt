@@ -1,5 +1,4 @@
 transformers[torch]==4.42.4
-# The PyPI wheel, CPU-only on Windows.
 torch==2.4.1
 onnxruntime==1.19.2
 optimum==1.21.3
@@ -8,6 +7,4 @@ onnx==1.16.2
 onnxconverter-common==1.14.0
 tqdm==4.66.5
 onnxslim==0.1.31
-# graphsurgeon is only imported (not exercised in the q4 path); the PyPI build
-# is enough.
 onnx-graphsurgeon

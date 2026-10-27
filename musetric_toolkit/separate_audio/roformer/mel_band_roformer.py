@@ -1,9 +1,3 @@
-# Based on Mel-Band RoFormer implementation by Phil Wang (lucidrains)
-# Original: https://github.com/lucidrains/BS-RoFormer
-# License: MIT
-# Architecture variant compatible with ZFTurbo MSST / audio-separator checkpoints
-# (e.g. Mel-Band-Roformer_Duality, whose weights are Apache-2.0).
-# Modified for Musetric project: beartype removed, attend import localized.
 # ruff: noqa: PLR0913, PLR0915, PLR2004, S101, E501
 # ruff: noqa: N802, N806, N812, B905, RUF007, F841, C901, PLR0912, SIM210
 
@@ -329,7 +323,7 @@ class MelBandRoformer(Module):
         freqs = torch.stft(
             torch.randn(1, 4096),
             **self.stft_kwargs,
-            window=torch.ones(stft_win_length),  # shape-only probe; window irrelevant
+            window=torch.ones(stft_win_length),
             return_complex=True,
         ).shape[1]
 
@@ -394,9 +388,6 @@ class MelBandRoformer(Module):
         self.match_input_audio_length = match_input_audio_length
 
     def net_forward(self, stft_repr):
-        # Pure NN core (ONNX-export boundary): real STFT representation -> real
-        # masks. No torch.stft/istft/view_as_complex inside — those stay host-side.
-        # stft_repr: (b, f*s, t, c=2) real ; returns masks (b, n, f, t, c=2) real.
         batch = stft_repr.shape[0]
         device = stft_repr.device
         freq_indices = self.freq_indices.to(device)
@@ -426,8 +417,6 @@ class MelBandRoformer(Module):
         return masks
 
     def encode_stft(self, raw_audio):
-        # Host-side front-end (stays OUTSIDE the ONNX graph): (b, s, t) audio ->
-        # real STFT repr (b, f*s, frames, 2). Mirrors the STFT block of forward.
         raw_audio, ps = pack_one(raw_audio, "* t")
         stft_window = self.stft_window_fn().to(raw_audio.device)
         stft_repr = torch.stft(
@@ -439,9 +428,6 @@ class MelBandRoformer(Module):
         return stft_repr
 
     def decode_istft(self, stft_repr, masks, length=None):
-        # Host-side back-end (stays OUTSIDE the ONNX graph): real STFT repr + real
-        # masks -> reconstructed audio (b, s, t). Mirrors the mask-apply + iSTFT
-        # tail of forward (non-mps path).
         device = stft_repr.device
         batch = stft_repr.shape[0]
         channels = self.audio_channels
@@ -487,17 +473,6 @@ class MelBandRoformer(Module):
         return recon_audio
 
     def forward(self, raw_audio, target=None, return_loss_breakdown=False):
-        """
-        einops
-
-        b - batch
-        f - freq
-        t - time
-        s - audio channel (1 for mono, 2 for stereo)
-        n - number of 'stems'
-        c - complex (2)
-        d - feature dimension
-        """
 
         original_device = raw_audio.device
         x_is_mps = True if original_device.type == "mps" else False

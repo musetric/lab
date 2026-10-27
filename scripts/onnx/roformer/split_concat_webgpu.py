@@ -1,20 +1,4 @@
 # ruff: noqa: T201 -- CLI build tool: stdout (progress/results) is its interface.
-"""Patch wide Concat/Split nodes for execution providers with buffer-count caps.
-
-The WebGPU EP gives each Concat input / Split output its own storage buffer and
-batches them in groups of `maxStorageBuffersPerShaderStage`, so any node with too
-many inputs+outputs in a single program trips the hard device cap ("Too many
-storage buffers ...").
-
-A shader touches `variable buffers + 1` storage buffers, so GROUP=8 keeps every
-rewritten node at <=9 storage buffers, under the 10 of Dawn/Metal
-(https://issues.chromium.org/issues/505056912).
-
-Concat (fixed axis) and Split (fixed axis) are associative, so each wide node is
-rewritten into a tree where every node touches <=GROUP variable buffers.
-Bit-identical to the original. The rewrite is idempotent-safe: re-running it on an
-already-patched model just re-trees any node still wider than GROUP.
-"""
 
 from __future__ import annotations
 
@@ -25,7 +9,7 @@ import numpy as np
 import onnx
 from onnx import helper, numpy_helper
 
-GROUP = 8  # <=8 variable buffers + 1 -> <=9 storage buffers (macOS/Metal cap = 10)
+GROUP = 8
 
 parser = argparse.ArgumentParser(description="Patch wide Concat/Split nodes.")
 parser.add_argument("--input", required=True, type=Path)
@@ -36,17 +20,11 @@ args.output.parent.mkdir(parents=True, exist_ok=True)
 model = onnx.load(str(args.input), load_external_data=True)
 graph = model.graph
 
-# Weights are now in `raw_data`; drop the external offsets of the source layout
-# so that save_model writes them contiguously.
 for t in graph.initializer:
     if t.data_location == onnx.TensorProto.EXTERNAL:
         t.data_location = onnx.TensorProto.DEFAULT
         del t.external_data[:]
 
-# --- Pass 0: keep attention Softmax in fp16 -------------------------------
-# The fp16 conversion wraps each Softmax in Cast(fp16->fp32)->Softmax->Cast;
-# dropping the casts keeps the scores fp16. Only a Softmax wrapped on both sides
-# is unwrapped.
 producer = {o: n for n in graph.node for o in n.output}
 consumers: dict[str, list] = {}
 for n in graph.node:
@@ -105,9 +83,6 @@ def chunks(seq):
 def split_sizes(node) -> np.ndarray:
     if len(node.input) > 1 and node.input[1]:
         return numpy_helper.to_array(inits[node.input[1]]).astype(np.int64)
-    # opset >= 18 Split without a sizes input (what torch.chunk exports): every
-    # output is ceil(dim / num_outputs) along the axis and the last one takes the
-    # rest, so the sizes follow from the static input shape.
     dims = static_dims[node.input[0]]
     axis = get_axis(node)
     dim = dims[axis if axis >= 0 else axis + len(dims)]
@@ -155,7 +130,6 @@ for node in graph.node:
         out_groups = list(chunks(outs))
         size_groups = list(chunks(sizes.tolist()))
 
-        # Level 1: split data into one tensor per group (size = sum of group).
         group_names = []
         for gi, og in enumerate(out_groups):
             group_names.append(og[0] if len(og) == 1 else f"{base}__grp{gi}")
@@ -170,7 +144,6 @@ for node in graph.node:
                 "Split", [data_in, l1_sizes], group_names, name=f"{base}__l1", axis=axis
             )
         )
-        # Level 2: split each multi-output group into the original outputs.
         for gi, (og, sg) in enumerate(zip(out_groups, size_groups, strict=False)):
             if len(og) == 1:
                 continue
@@ -199,8 +172,6 @@ graph.initializer.extend(new_inits)
 print(f"rewrote {n_concat} Concat + {n_split} Split node(s)")
 onnx.checker.check_model(model, full_check=False)
 
-# onnx's external-data writer appends to an existing .data file instead of
-# truncating, so stale runs would inflate it. Start clean.
 args.output.unlink(missing_ok=True)
 Path(str(args.output) + ".data").unlink(missing_ok=True)
 

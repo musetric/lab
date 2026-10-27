@@ -1,20 +1,3 @@
-"""Export the ChordMini ChordNet classifier as a feature-to-logits ONNX graph.
-
-The graph intentionally covers only the neural classifier boundary required by
-the WebGPU CQT pipeline:
-
-    log-CQT features [W, 108, 144]
-      -> (features - mean) / (std + 1e-8)
-      -> ChordNet
-      -> logits [W, 108, 170]
-
-It does not contain CQT extraction, frame padding/windowing, temporal smoothing,
-or argmax; those stages stay in the WebGPU runtime.
-
-    uv run --group export python scripts/onnx/chordmini/export_chordnet.py \
-      --out <export-dir> --models-path <checkpoint-cache-dir>
-"""
-
 # ruff: noqa: T201
 
 import argparse
@@ -56,7 +39,6 @@ SMOOTHING_KERNEL = 9
 
 
 class ChordNetPipeline(nn.Module):
-    """Normalize CQT features and return unsmoothed ChordNet logits."""
 
     def __init__(self, model: ChordNet, mean: float, std: float) -> None:
         super().__init__()
@@ -71,7 +53,6 @@ class ChordNetPipeline(nn.Module):
         )
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
-        """Return logits for unnormalized log-CQT feature windows."""
         normalized_features = (features - self.normalization_mean) / (
             self.normalization_std + NORMALIZATION_EPSILON
         )
@@ -85,12 +66,10 @@ def _contract_value(
     key: str,
     default: int,
 ) -> int:
-    """Read an integer config value and enforce the fixed ONNX contract."""
     return int(get_config_value(config, section, key, default))
 
 
 def _validate_contract(seq_len: int, n_bins: int, num_chords: int) -> None:
-    """Reject checkpoints/configurations that do not match the WebGPU contract."""
     expected_values = {
         "seq_len": (seq_len, EXPECTED_SEQ_LEN),
         "n_bins": (n_bins, EXPECTED_N_BINS),
@@ -107,7 +86,6 @@ def _validate_contract(seq_len: int, n_bins: int, num_chords: int) -> None:
 
 
 def build_pipeline(models_path: str) -> tuple[ChordNetPipeline, int, int, int]:
-    """Load the checkpoint and return its classifier plus contract dimensions."""
     config = HParams.load(str(CONFIG_PATH))
     checkpoint = ensure_checkpoint(models_path)
     model, mean, std = load_model(
@@ -128,7 +106,6 @@ def _set_shape_dimensions(
     value_info: onnx.ValueInfoProto,
     dimensions: tuple[str | int, ...],
 ) -> None:
-    """Set ONNX tensor shape metadata without changing graph operations."""
     tensor_shape = value_info.type.tensor_type.shape
     if len(tensor_shape.dim) != len(dimensions):
         message = (
@@ -152,7 +129,6 @@ def _write_contract_shape_metadata(
     n_bins: int,
     num_chords: int,
 ) -> None:
-    """Make the dynamic-window/static-frame ONNX interface explicit."""
     model = onnx.load(onnx_path)
     if len(model.graph.input) != 1 or len(model.graph.output) != 1:
         raise ValueError("ChordNet ONNX graph must have exactly one input and output")
@@ -179,7 +155,6 @@ def _write_config(
     n_bins: int,
     num_chords: int,
 ) -> None:
-    """Write the feature-to-logits artifact contract next to the ONNX graph."""
     config_payload = {
         "modelType": "chordmini-chordnet-2e1d",
         "input": {
@@ -214,7 +189,6 @@ def _write_config(
 
 
 def main() -> None:
-    """Export ChordNet and its machine-readable input/output contract."""
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--out",
