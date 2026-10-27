@@ -192,6 +192,13 @@ by `--compare` are more than 50 cents from `--reference`;
 `--reference reference` draws the reference of the bench; on a truth set,
 `--reference truth` draws the ground truth.
 
+Each window also gets the two CSVs cut to it under `csv/`, and `windows.md`
+in `--out-dir` lists the windows with why each was picked, such as its share
+of singing that is not clean. An overlay draws one `--compare` against one
+`--reference`: two trackers are drawn by one `plot` each, into their own
+`--out-dir`, with the same `--reference` and the same `--window`s, and their
+numbers go into a table, such as the tables of `score`, not onto the images.
+
 To change the reference, `tune` scores a grid of weights and parameters of
 the ensemble on the truth sets, next to every model alone, in four tables:
 the clean share, the trusted frames within 50 cents of the truth, the share
