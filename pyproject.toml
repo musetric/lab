@@ -36,6 +36,7 @@ musetric-pitch = "musetric_toolkit.pitch_audio.main_cli:main_cli"
 musetric-pitch-zoo = "musetric_toolkit.pitch_zoo.main_cli:main_cli"
 musetric-parity = "musetric_toolkit.parity_audio.main_cli:main_cli"
 musetric-rhythm-bench = "musetric_toolkit.rhythm_bench.main_cli:main_cli"
+musetric-distill = "musetric_toolkit.distill.main_cli:main_cli"
 
 [tool.uv]
 required-version = "==0.13.5"
