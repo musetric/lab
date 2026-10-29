@@ -31,7 +31,9 @@ NORMALIZE_TAILS = frozenset({"Sqrt", "Reciprocal", "Pow", "Rsqrt"})
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description="audit an fp16 core for unsafe epsilons"
+    )
     parser.add_argument("models", nargs="+", type=Path)
     parser.add_argument(
         "--weights",

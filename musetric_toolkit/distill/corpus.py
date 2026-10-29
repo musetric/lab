@@ -18,6 +18,8 @@ def manifest_tracks(manifest: Path) -> list[dict]:
         track = dict(id=e["id"], mix=Path(e["audio"]), role=e["role"], group=e["group"])
         if "truth" in e:
             track["truth"] = Path(e["truth"])
+        if e.get("pell"):
+            track["pell"] = True
         tracks.append(track)
     return tracks
 

@@ -257,23 +257,27 @@ class MDXNetSeparator:
         send_message({"type": "progress", "progress": 1.0})
         return tar_waves[0]
 
-    def separate_audio(
-        self, source_path: str, vocal_path: str, instrumental_path: str
-    ) -> None:
+    def compensation(self) -> float:
         self._load_model()
+        return self.compensate
 
-        mixture = read_audio_file(source_path, self.sample_rate, 2)
+    def demix_array(self, mixture: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        self._load_model()
         peak = np.abs(mixture).max()
         if peak == 0:
             raise RuntimeError("Input audio appears to be silent.")
         mixture = mixture / peak
-
         primary = utils.match_array_shapes(self._demix(mixture), mixture)
         secondary = utils.match_array_shapes(
             mixture - (primary * self.compensate), mixture
         )
-        primary_source = primary * peak
-        secondary_source = secondary * peak
+        return primary * peak, secondary * peak
+
+    def separate_audio(
+        self, source_path: str, vocal_path: str, instrumental_path: str
+    ) -> None:
+        mixture = read_audio_file(source_path, self.sample_rate, 2)
+        primary_source, secondary_source = self.demix_array(mixture)
 
         primary_time = utils.normalize(primary_source, max_peak=0.9, min_peak=0.0).T
         secondary_time = utils.normalize(secondary_source, max_peak=0.9, min_peak=0.0).T

@@ -428,36 +428,39 @@ class MelBandRoformer(Module):
         return stft_repr
 
     def decode_istft(self, stft_repr, masks, length=None):
-        device = stft_repr.device
-        batch = stft_repr.shape[0]
-        channels = self.audio_channels
-        stft_window = self.stft_window_fn().to(device)
-
         stft_repr = rearrange(stft_repr, "b f t c -> b 1 f t c")
         stft_repr = torch.view_as_complex(stft_repr)
-        masks = torch.view_as_complex(masks)
-        masks = masks.type(stft_repr.dtype)
+        masks_averaged = self.average_masks(masks, stft_repr)
+        recon_audio = self.istft_stems(stft_repr * masks_averaged, length)
+        if self.num_stems == 1:
+            recon_audio = rearrange(recon_audio, "b 1 s t -> b s t")
+        return recon_audio
 
+    def average_masks(self, masks, stft_repr):
+        device = stft_repr.device
+        batch, stems = masks.shape[:2]
+        masks = torch.view_as_complex(masks).type(stft_repr.dtype)
         scatter_indices = repeat(
             self.freq_indices.to(device),
             "f -> b n f t",
             b=batch,
-            n=self.num_stems,
+            n=stems,
             t=stft_repr.shape[-1],
         )
-        stft_repr_expanded_stems = repeat(
-            stft_repr, "b 1 ... -> b n ...", n=self.num_stems
-        )
+        stft_repr_expanded_stems = repeat(stft_repr, "b 1 ... -> b n ...", n=stems)
         masks_summed = torch.zeros_like(stft_repr_expanded_stems).scatter_add_(
             2, scatter_indices, masks
         )
+        denom = repeat(
+            self.num_bands_per_freq.to(device), "f -> (f r) 1", r=self.audio_channels
+        )
+        return masks_summed / denom.clamp(min=1e-8)
 
-        denom = repeat(self.num_bands_per_freq.to(device), "f -> (f r) 1", r=channels)
-        masks_averaged = masks_summed / denom.clamp(min=1e-8)
-
-        stft_repr = stft_repr * masks_averaged
+    def istft_stems(self, stft_repr, length=None):
+        batch, stems = stft_repr.shape[:2]
+        channels = self.audio_channels
+        stft_window = self.stft_window_fn().to(stft_repr.device)
         stft_repr = rearrange(stft_repr, "b n (f s) t -> (b n s) f t", s=channels)
-
         recon_audio = torch.istft(
             stft_repr,
             **self.stft_kwargs,
@@ -465,12 +468,9 @@ class MelBandRoformer(Module):
             return_complex=False,
             length=length,
         )
-        recon_audio = rearrange(
-            recon_audio, "(b n s) t -> b n s t", b=batch, s=channels, n=self.num_stems
+        return rearrange(
+            recon_audio, "(b n s) t -> b n s t", b=batch, s=channels, n=stems
         )
-        if self.num_stems == 1:
-            recon_audio = rearrange(recon_audio, "b 1 s t -> b s t")
-        return recon_audio
 
     def forward(self, raw_audio, target=None, return_loss_breakdown=False):
 

@@ -41,3 +41,34 @@ musetric-distill musdb-score --release release --musdb musdb --teacher-vocals te
 learnt weights every `--snapshot-steps`; `evaluate` scores a checkpoint on the
 held-out tracks of the corpus, and `musdb-separate`, `musdb-compare` and
 `musdb-bleed` score and compare checkpoints on MUSDB18-HQ.
+
+## Lead and backing
+
+The split of musetric/musetric#1084 gives the released student two more
+outputs in the same pass: `LeadBackingRoformer` of `separate_audio` keeps the
+student's vocals mask and adds a mask that takes the backing out of the
+vocals; the lead is the vocals minus the backing, so the two sum to the
+vocals. Its labels are the student's own vocals and KARA 2's backing of them,
+taken at the volume compensation of KARA 2's model data, which
+`label-voices` writes to `teacher.json` of the labels: the part of the
+vocals that today's cascade takes out.
+
+```bash
+musetric-distill label-voices --student student --kara kara2 --corpus open --manifest voices.json --labels voices
+musetric-distill train-voices --student student --labels voices --out split
+musetric-distill data-ccmixter-voices --crawl ccmixter-crawl --out ccmixter-voices
+musetric-distill score-voices --student student --kara kara2 --cascade --checkpoint split/split.pt --golden ccmixter-voices/mix --out scores.json
+musetric-distill release-voices --student student --checkpoint split/split.pt --labels voices --corpus open --out release
+```
+
+`release-voices` writes the whole model's weights and config, and
+`training-data.csv` with every track it learned from: the student's and those
+of the split.
+
+`kara2` holds UVR's `UVR_MDXNET_KARA_2.onnx` and `model_data.json`; KARA 2
+runs on onnxruntime's CUDA provider. `score-voices` scores the split and the
+cascade of the student and KARA 2 against true lead and backing stems.
+`data-ccmixter-voices` builds such a set from ccMixter a cappellas whose lead
+and backing parts are separate uploads (CC BY and CC0), as `acappella/` and,
+over the upload's own instrument stems, `mix/`; it is evaluation only, and its
+uploaders are kept out of training.
