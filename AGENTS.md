@@ -5,10 +5,7 @@
 - This is a Python project managed with `uv`: Python comes from `requires-python` and uv from `required-version` in `pyproject.toml`.
 - Prefer existing `uv run` scripts and tools; use free-form commands only when no script exists.
 - The repository checks of `@musetric/checks` (English letters, notices, links) come from npm: `npm ci` installs them and `scripts/check.py` runs them; a file where another language is part of its meaning goes to `checks.english.except` of `package.json`.
-
-## Commits & PR Titles
-
-- Name commits and PR titles per `.github/prTitle.config.yml`.
+- The rules of the organization apply here and are not repeated: the [code](https://github.com/musetric/headquarters/blob/main/practices/code.md) of every repository, [what may be said about audio](https://github.com/musetric/headquarters/blob/main/practices/public-texts.md#material) and the other [practices](https://github.com/musetric/headquarters/blob/main/AGENTS.md#map). The rules below are this repository's own.
 
 ## Repository Map
 
@@ -31,11 +28,6 @@
 - Follow the existing ruff, black, and isort config. Do not fight it.
 - Use `snake_case` for modules, functions, variables, and directories, and `PascalCase` for classes.
 - Use absolute, explicit imports (e.g. `from musetric_toolkit.common.logger import ...`): no relative imports (ruff bans them) and no `import *`.
-
-**Files**
-
-- Keep files domain-specific and self-contained: do not create catch-all files like `types.py` or `utils.py`; keep an entity's types and functions together.
-- If a file contains several small domain entities, do not interleave them; keep each entity grouped, and place the more foundational entity before the next one.
 
 **Type Hints**
 
