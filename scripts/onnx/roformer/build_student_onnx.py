@@ -119,6 +119,10 @@ def load_model(checkpoint, config) -> PooledMelBandRoformer:
         cfg = yaml.safe_load(f)
     model = PooledMelBandRoformer(**cfg["model"]).eval()
     model.load_state_dict(load_file(checkpoint))
+    return exportable(model)
+
+
+def exportable(model: PooledMelBandRoformer) -> PooledMelBandRoformer:
     for module in model.modules():
         if isinstance(module, Attend):
             module.flash = False
@@ -238,6 +242,19 @@ class Hourglass:
 def hourglass_net_forward(
     model: PooledMelBandRoformer, stft_repr: torch.Tensor, slabs: int
 ) -> torch.Tensor:
+    x = hourglass_trunk(model, stft_repr, slabs)
+    frames = x.shape[1]
+    pooled = down(x, model.mask_pool, 1)
+    masks = torch.stack(
+        [up(fn(pooled), model.mask_pool, 1, frames) for fn in model.mask_estimators],
+        dim=1,
+    )
+    return rearrange(masks, "b n t (f c) -> b n f t c", c=2)
+
+
+def hourglass_trunk(
+    model: PooledMelBandRoformer, stft_repr: torch.Tensor, slabs: int
+) -> torch.Tensor:
     if not hasattr(model, "hourglass"):
         prepare(model)
     pooled_maps, path_product = model.hourglass
@@ -259,15 +276,7 @@ def hourglass_net_forward(
             y = y + grouped_matmul(stream.m, *pooled_maps[i], max(1, slabs // k))
             stream.product = path_product
         stream.m = y
-    x = stream.full_rate(slabs)
-
-    frames = x.shape[1]
-    pooled = down(x, model.mask_pool, 1)
-    masks = torch.stack(
-        [up(fn(pooled), model.mask_pool, 1, frames) for fn in model.mask_estimators],
-        dim=1,
-    )
-    return rearrange(masks, "b n t (f c) -> b n f t c", c=2)
+    return stream.full_rate(slabs)
 
 
 _keep_time_attention_fp32 = bfo.keep_time_attention_fp32

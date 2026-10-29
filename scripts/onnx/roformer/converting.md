@@ -32,6 +32,14 @@ The student's core takes `build_student_onnx.py` with the same flags on the
 then the same four steps under the name `duality_student_core_t1100`. A fused
 graph reads the `.onnx.data` of its input, which goes next to it.
 
+The core that also splits the vocals into lead and backing
+([musetric/musetric#1084](https://github.com/musetric/musetric/issues/1084))
+takes `build_lead_backing_onnx.py` with the same flags and files, plus
+`--split` with a `split.pt` of `musetric-distill train-voices`, or
+`--split-hidden N` for random split weights of that width, to time a shape
+before training it. Its `masks` are `[2, 2050, 1100, 2]`: the vocals mask and
+the share of the vocals that is backing.
+
 - `--attn-block 128` splits the time attentions into blocks of 128 query rows.
 - `--fuse-rmsnorm` gives every RMSNorm one `ai.onnx::RMSNormalization` kernel, and `--all-fp16` drops the fp32 pins.
 - Under `--all-fp16` the transformer norms take `RMSNORM_EPS_FP16` (1e-9); the band split, with `RMSNORM_EPS` (1e-12), and every attention over T keys from its scores to its product with the values stay fp32.

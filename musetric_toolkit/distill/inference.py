@@ -12,22 +12,28 @@ def student_forward(model, mix: torch.Tensor) -> torch.Tensor:
     return model.decode_istft(stft, masks.float(), length=mix.shape[-1])
 
 
-def infer_overlap(model, mix: np.ndarray) -> np.ndarray:
+def overlap_add(forward, mix: np.ndarray) -> np.ndarray:
     length = mix.shape[1]
     padded = np.pad(mix, ((0, 0), (0, max(0, CHUNK - length))))
     x = torch.from_numpy(padded).cuda()
     total = x.shape[1]
     starts = sorted({min(i, total - CHUNK) for i in range(0, total, STEP)})
     window = torch.hamming_window(CHUNK, device="cuda")
-    acc = torch.zeros_like(x)
-    norm = torch.zeros(total, device="cuda")
-    model.eval()
+    acc, norm = None, torch.zeros(total, device="cuda")
     with torch.no_grad():
         for group in range(0, len(starts), 2):
             batch = starts[group : group + 2]
             windows = torch.stack([x[:, s : s + CHUNK] for s in batch])
-            for s, part in zip(batch, student_forward(model, windows), strict=True):
-                acc[:, s : s + CHUNK] += part * window
+            for s, part in zip(batch, forward(windows), strict=True):
+                if acc is None:
+                    acc = torch.zeros(*part.shape[:-1], total, device="cuda")
+                acc[..., s : s + CHUNK] += part * window
                 norm[s : s + CHUNK] += window
+    return (acc / norm.clamp(min=1e-10))[..., :length].cpu().numpy()
+
+
+def infer_overlap(model, mix: np.ndarray) -> np.ndarray:
+    model.eval()
+    out = overlap_add(lambda windows: student_forward(model, windows), mix)
     model.train()
-    return (acc / norm.clamp(min=1e-10))[:, :length].cpu().numpy()
+    return out

@@ -42,7 +42,9 @@ ROW_DISPATCH_OPS = (
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description="audit a core for WebGPU dispatch rows"
+    )
     parser.add_argument("models", nargs="+", type=Path)
     return parser.parse_args()
 

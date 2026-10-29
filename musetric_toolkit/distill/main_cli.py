@@ -21,6 +21,7 @@ EXTENSIONS = [
     "musetric_toolkit.distill.data.fma_expand",
     "musetric_toolkit.distill.data.ccmixter_fetch",
     "musetric_toolkit.distill.data.musdb_fetch",
+    "musetric_toolkit.distill.data.ccmixter_voices",
     "musetric_toolkit.distill.data.analyze",
     "musetric_toolkit.distill.data.screen",
     "musetric_toolkit.distill.data.screen_dedupe",
@@ -29,6 +30,10 @@ EXTENSIONS = [
     "musetric_toolkit.distill.data.corpus_disagreement",
     "musetric_toolkit.distill.data.corpus_marks",
     "musetric_toolkit.distill.data.mine_natural",
+    "musetric_toolkit.distill.voices",
+    "musetric_toolkit.distill.voices_training",
+    "musetric_toolkit.distill.voices_scores",
+    "musetric_toolkit.distill.voices_release",
 ]
 NEW_PARTS = (
     r"^(detail_paths|mask_estimators)\.|^layers\.[01]\.[01]\.layers\.0\.0\."

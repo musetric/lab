@@ -194,6 +194,16 @@ class PooledMelBandRoformer(MelBandRoformer):
         return features @ w.to(features.dtype) + b.to(features.dtype)
 
     def net_forward(self, stft_repr: torch.Tensor) -> torch.Tensor:
+        x = self.trunk(stft_repr)
+        frames = x.shape[1]
+        pooled = down(x, self.mask_pool, 1)
+        masks = torch.stack(
+            [up(fn(pooled), self.mask_pool, 1, frames) for fn in self.mask_estimators],
+            dim=1,
+        )
+        return rearrange(masks, "b n t (f c) -> b n f t c", c=2)
+
+    def trunk(self, stft_repr: torch.Tensor) -> torch.Tensor:
         batch = stft_repr.shape[0]
         batch_arange = torch.arange(batch, device=stft_repr.device)[..., None]
         x = stft_repr[batch_arange, self.freq_indices.to(stft_repr.device)]
@@ -221,11 +231,4 @@ class PooledMelBandRoformer(MelBandRoformer):
                 change = unmerge_bands(change, first)
             y = x + up(change, k, 1, frames)
             x = y + self._detail(i, x, coarse) if with_detail else y
-
-        frames = x.shape[1]
-        pooled = down(x, self.mask_pool, 1)
-        masks = torch.stack(
-            [up(fn(pooled), self.mask_pool, 1, frames) for fn in self.mask_estimators],
-            dim=1,
-        )
-        return rearrange(masks, "b n t (f c) -> b n f t c", c=2)
+        return x
