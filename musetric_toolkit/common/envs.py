@@ -8,12 +8,12 @@ model_checkpoint_rel_path = Path(model_mel_band_roformer_dir) / "model.ckpt"
 model_config_rel_path = Path(model_mel_band_roformer_dir) / "config.yaml"
 
 student_revision_url = (
-    "https://huggingface.co/musetric/mel-band-roformer-duality-student/resolve/"
-    "c9d2c65a65d820bdd4efdc7d62bb348998969592"
+    "https://huggingface.co/musetric/mel-band-roformer-duality-kara2-student/resolve/"
+    "50840afb209eca847e4f88b33c3f36094feb7a41"
 )
 student_weights_url = f"{student_revision_url}/model.safetensors"
 student_config_url = f"{student_revision_url}/config.yaml"
-student_dir = "mel_band_roformer_duality_student"
+student_dir = "mel_band_roformer_duality_kara2_student"
 student_weights_rel_path = Path(student_dir) / "model.safetensors"
 student_config_rel_path = Path(student_dir) / "config.yaml"
 

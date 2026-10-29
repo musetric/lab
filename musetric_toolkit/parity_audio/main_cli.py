@@ -7,7 +7,7 @@ import warnings
 from musetric_toolkit.common.logger import redirect_std_streams, setup_logging
 from musetric_toolkit.common.paths import default_models_path
 
-STEPS = ["vocals", "voices", "rhythm", "key", "chords", "transcribe"]
+STEPS = ["vocals", "rhythm", "key", "chords", "transcribe"]
 
 
 def configure_warning_filters(log_level: str) -> None:
