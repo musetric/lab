@@ -3,8 +3,6 @@ from dataclasses import dataclass
 import numpy as np
 
 VOCALS_STEP_SECONDS = 8
-LEAD_BACKING_OVERLAP = 0.25
-LEAD_BACKING_COMPENSATE = 1.065
 COUNTER_FLOOR = 1e-10
 MAX_PEAK = 0.9
 
@@ -38,39 +36,6 @@ def vocals_plan(sample_rate: int, samples: int, chunk_samples: int) -> UnitPlan:
     table = 0.54 - 0.46 * np.cos(2.0 * np.pi * position / chunk_samples)
     weights = {unit.length: table[: unit.length] for unit in units}
     return UnitPlan(units, chunk_samples, weights)
-
-
-@dataclass(frozen=True)
-class LeadBackingLayout:
-    plan: UnitPlan
-    trim: int
-    mixture_samples: int
-
-
-def lead_backing_plan(
-    samples: int, chunk_samples: int, n_fft: int
-) -> LeadBackingLayout:
-    trim = n_fft // 2
-    gen_samples = chunk_samples - 2 * trim
-    mixture_samples = 2 * trim + samples + gen_samples - samples % gen_samples
-    step = int((1.0 - LEAD_BACKING_OVERLAP) * chunk_samples)
-    units = []
-    start = 0
-    while start < mixture_samples:
-        units.append(PlanUnit(start, min(chunk_samples, mixture_samples - start)))
-        start += step
-    weights = {}
-    for unit in units:
-        if unit.length == 1:
-            weights[1] = np.ones(1)
-        else:
-            position = np.arange(unit.length)
-            weights[unit.length] = 0.5 - 0.5 * np.cos(
-                2.0 * np.pi * position / (unit.length - 1)
-            )
-    return LeadBackingLayout(
-        UnitPlan(units, chunk_samples, weights), trim, mixture_samples
-    )
 
 
 def unit_window(planar: np.ndarray, plan: UnitPlan, index: int) -> np.ndarray:

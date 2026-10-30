@@ -7,14 +7,12 @@ from musetric_toolkit.parity_audio import (
     rhythm_chain,
     transcribe_chain,
     vocals_chain,
-    voices_chain,
 )
 from musetric_toolkit.parity_audio.case_writer import CaseWriter
 from musetric_toolkit.separate_audio.system_info import ensure_ffmpeg
 
 CHAINS = {
     "vocals": vocals_chain.run,
-    "voices": voices_chain.run,
     "rhythm": rhythm_chain.run,
     "key": key_chain.run,
     "chords": chords_chain.run,
