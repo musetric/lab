@@ -15,7 +15,7 @@ with contextlib.suppress(Exception):
 ENCODER = "encoder_model_q4.onnx"
 DATA_SUFFIX = "_data"
 EXTERNAL_THRESHOLD = 1024
-DECODERS = ["decoder_model_merged_fp16.onnx", "decoder_model_merged_q4.onnx"]
+DECODER = "decoder_model_merged_fp16.onnx"
 
 DEFAULT_DEST = (
     Path(__file__).resolve().parents[4] / "models" / "whisper-large-v3-turbo-onnx"
@@ -36,7 +36,6 @@ PUBLISH_FILES = [
     "encoder_model_q4.onnx",
     "decoder_model_merged_fp16.onnx",
     "cross_kv_fp16.onnx",
-    "decoder_model_merged_q4.onnx",
 ]
 
 
@@ -68,16 +67,15 @@ def main() -> None:
         )
     print(f"checked {ENCODER}: mobile-safe")
 
-    for name in DECODERS:
-        decoder = source_path(export, name)
-        reasons = mobile_decoder.verify(onnx.load(str(decoder)))
-        if reasons:
-            listing = "\n  ".join(reasons)
-            raise SystemExit(
-                f"{decoder} would compute wrong on a mobile GPU:\n  {listing}\n"
-                f"run mobile_decoder.py over it before staging"
-            )
-        print(f"checked {name}: mobile-safe")
+    decoder = source_path(export, DECODER)
+    reasons = mobile_decoder.verify(onnx.load(str(decoder)))
+    if reasons:
+        listing = "\n  ".join(reasons)
+        raise SystemExit(
+            f"{decoder} would compute wrong on a mobile GPU:\n  {listing}\n"
+            f"run mobile_decoder.py over it before staging"
+        )
+    print(f"checked {DECODER}: mobile-safe")
 
     for rel in PUBLISH_FILES:
         source = source_path(export, rel)
