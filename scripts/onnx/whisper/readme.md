@@ -39,9 +39,11 @@ uv run python scripts/onnx/whisper/scale_residual_stream.py --input X --output Y
 - `flatten_decoder_step.py` takes the fp16 decoder only; the q4 decoder stays merged.
 - A pass keys the nodes it replaces by their position in `graph.node`, never by `id(node)`.
 
-`stage_whisper.py` copies the published set flat into the clone of the model
-repository, refusing a graph that skipped its mobile pass; the model card holds
-each file's contract, and the [practice of models](https://github.com/musetric/headquarters/blob/main/practices/models.md) the publication.
+`stage_whisper.py` writes the published set flat into the clone of the model
+repository, every graph with its weights beside it in `<graph>_data`, so a
+browser hands them to the GPU without passing them through the wasm heap, and
+refuses a graph that skipped its mobile pass; the model card holds each file's
+contract, and the [practice of models](https://github.com/musetric/headquarters/blob/main/practices/models.md) the publication.
 
 To find the graph a provider gets wrong, transformers.js takes `device` as a map
 keyed by file name, such as `{ encoder_model: 'webgpu', decoder_model_merged: 'wasm' }`,

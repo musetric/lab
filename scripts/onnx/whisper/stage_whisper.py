@@ -2,7 +2,6 @@
 
 import argparse
 import contextlib
-import shutil
 import sys
 from pathlib import Path
 
@@ -14,6 +13,8 @@ with contextlib.suppress(Exception):
     sys.stdout.reconfigure(encoding="utf-8")
 
 ENCODER = "encoder_model_q4.onnx"
+DATA_SUFFIX = "_data"
+EXTERNAL_THRESHOLD = 1024
 DECODERS = ["decoder_model_merged_fp16.onnx", "decoder_model_merged_q4.onnx"]
 
 DEFAULT_DEST = (
@@ -83,10 +84,20 @@ def main() -> None:
         target = dest / rel
         target.parent.mkdir(parents=True, exist_ok=True)
         if rel.endswith(".onnx"):
-            shutil.copy2(source, target)
+            data = target.with_name(f"{target.name}{DATA_SUFFIX}")
+            data.unlink(missing_ok=True)
+            onnx.save_model(
+                onnx.load(str(source)),
+                str(target),
+                save_as_external_data=True,
+                all_tensors_to_one_file=True,
+                location=data.name,
+                size_threshold=EXTERNAL_THRESHOLD,
+            )
+            print(f"staged {rel} and {data.name}")
         else:
             target.write_bytes(source.read_bytes().replace(b"\r\n", b"\n"))
-        print(f"staged {rel}")
+            print(f"staged {rel}")
     print(f"staged {len(PUBLISH_FILES)} files into {dest}")
 
 
