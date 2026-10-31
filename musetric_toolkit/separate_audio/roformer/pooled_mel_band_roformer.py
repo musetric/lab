@@ -105,19 +105,23 @@ class PooledMelBandRoformer(MelBandRoformer):
         merged_bands_from: list[int | None],
         time_window: list[int | None],
         time_heads: list[int],
-        ff_mult: list[float],
         band_map: list[bool],
         detail: list[list[str] | None],
         mask_rank: int,
         mask_pool: int,
+        ff_mult: list[float] | None = None,
+        ff_hidden: list[int] | None = None,
+        mask_hidden: int | None = None,
         **kwargs,
     ):
         kwargs.pop("mask_estimator_depth", None)
         super().__init__(dim, mask_estimator_depth=1, **kwargs)
         self.pool, self.merged_bands_from = pool, merged_bands_from
         self.mask_pool, self.detail_kinds = mask_pool, detail
+        self.mask_hidden = mask_hidden or dim * 4
         heads, dim_head = kwargs.get("heads", 8), kwargs.get("dim_head", 64)
         flash = kwargs.get("flash_attn", True)
+        ff_hidden = ff_hidden or [int(dim * mult) for mult in ff_mult]
 
         for i, (time_t, band_t) in enumerate(self.layers):
             for layer in time_t.layers:
@@ -129,7 +133,7 @@ class PooledMelBandRoformer(MelBandRoformer):
                 layer[0].rotary_embed = Rotary(dim_head, scale=pool[i])
                 if time_window[i]:
                     layer[0].attend = LocalAttend(max(1, time_window[i] // pool[i]))
-                self._narrow(layer[1], dim, ff_mult[i])
+                self._narrow(layer[1], dim, ff_hidden[i])
             if band_map[i]:
                 self.layers[i][1] = BandMap(dim)
             else:
@@ -138,7 +142,7 @@ class PooledMelBandRoformer(MelBandRoformer):
                 )
                 for layer in band_t.layers:
                     layer[0].rotary_embed = Rotary(dim_head, positions=positions)
-                    self._narrow(layer[1], dim, ff_mult[i])
+                    self._narrow(layer[1], dim, ff_hidden[i])
 
         self.detail_paths = nn.ParameterDict()
         for i, kinds in enumerate(detail):
@@ -147,12 +151,15 @@ class PooledMelBandRoformer(MelBandRoformer):
                 self.detail_paths[f"w{i}"] = nn.Parameter(torch.zeros(width, dim))
                 self.detail_paths[f"b{i}"] = nn.Parameter(torch.zeros(dim))
 
-        self._low_rank_middle(dim * 4, mask_rank)
+        self._low_rank_middle(dim, self.mask_hidden, mask_rank)
 
-    def _low_rank_middle(self, hidden: int, rank: int) -> None:
+    def _low_rank_middle(self, dim: int, hidden: int, rank: int) -> None:
         for estimator in self.mask_estimators:
             for band in estimator.to_freqs:
                 first_layer, tanh, last_layer = band[0]
+                if hidden != first_layer.out_features:
+                    first_layer = nn.Linear(dim, hidden)
+                    last_layer = nn.Linear(hidden, last_layer.out_features)
                 middle = nn.Sequential(
                     nn.Linear(hidden, rank), nn.Linear(rank, hidden, bias=False)
                 )
@@ -168,8 +175,7 @@ class PooledMelBandRoformer(MelBandRoformer):
         return list(range(first)) + merged
 
     @staticmethod
-    def _narrow(ff: nn.Module, dim: int, mult: float) -> None:
-        inner = int(dim * mult)
+    def _narrow(ff: nn.Module, dim: int, inner: int) -> None:
         if inner != ff.net[1].out_features:
             ff.net[1], ff.net[4] = nn.Linear(dim, inner), nn.Linear(inner, dim)
 
