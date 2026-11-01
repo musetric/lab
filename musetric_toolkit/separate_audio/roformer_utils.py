@@ -53,7 +53,9 @@ class AudioProcessor:
                         start_pos = total_len - chunk_size
                         length = chunk_size
                     else:
-                        part = mix_tensor
+                        part = torch.nn.functional.pad(
+                            mix_tensor, (0, chunk_size - total_len)
+                        )
                         start_pos = 0
                         length = total_len
                 else:
