@@ -7,15 +7,16 @@ model_mel_band_roformer_dir = "mel_band_roformer_duality"
 model_checkpoint_rel_path = Path(model_mel_band_roformer_dir) / "model.ckpt"
 model_config_rel_path = Path(model_mel_band_roformer_dir) / "config.yaml"
 
+student_revision = "8f928dd73899dd9279a878d732841919a98e61e6"
 student_revision_url = (
     "https://huggingface.co/musetric/mel-band-roformer-duality-kara2-student/resolve/"
-    "50840afb209eca847e4f88b33c3f36094feb7a41"
+    f"{student_revision}"
 )
 student_weights_url = f"{student_revision_url}/model.safetensors"
 student_config_url = f"{student_revision_url}/config.yaml"
-student_dir = "mel_band_roformer_duality_kara2_student"
-student_weights_rel_path = Path(student_dir) / "model.safetensors"
-student_config_rel_path = Path(student_dir) / "config.yaml"
+student_dir = Path("mel_band_roformer_duality_kara2_student") / student_revision
+student_weights_rel_path = student_dir / "model.safetensors"
+student_config_rel_path = student_dir / "config.yaml"
 
 karaoke_mdx_model_url = (
     "https://huggingface.co/AI4future/RVC/resolve/main/UVR_MDXNET_KARA_2.onnx"
