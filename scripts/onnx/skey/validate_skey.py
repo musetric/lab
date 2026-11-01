@@ -10,10 +10,10 @@ import torch
 
 from musetric_toolkit.key_audio.skey.key_detection import (
     key_map,
-    load_audio,
     load_checkpoint,
     load_model_components,
 )
+from musetric_toolkit.key_audio.skey_audio import load_skey_audio
 from musetric_toolkit.key_audio.skey_checkpoint import ensure_checkpoint
 
 with contextlib.suppress(Exception):
@@ -54,7 +54,7 @@ def main() -> None:
     ok = 0
     tracks = sorted(args.audio.glob("*.flac"))
     for track in tracks:
-        audio = load_audio(str(track), sample_rate).to(device)
+        audio = load_skey_audio(str(track), sample_rate).to(device)
         ref_idx, ref_conf = torch_key(hcqt, chromanet, crop_fn, audio, device)
 
         onnx_probs = session.run(None, {"audio": audio.numpy()})[0]
