@@ -22,7 +22,7 @@ class LeadBackingRoformer(PooledMelBandRoformer):
         )
 
     def _split_band(self, dim: int, dim_in: int) -> nn.Module:
-        out = nn.Linear(self.split_hidden or dim * 4, dim_in * 2)
+        out = nn.Linear(self.split_hidden or self.mask_hidden, dim_in * 2)
         nn.init.zeros_(out.weight)
         nn.init.zeros_(out.bias)
         if not self.split_hidden:
