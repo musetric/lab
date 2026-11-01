@@ -372,6 +372,7 @@ class MelBandRoformer(Module):
                 dim=dim,
                 dim_inputs=freqs_per_bands_with_complex,
                 depth=mask_estimator_depth,
+                mlp_expansion_factor=mlp_expansion_factor,
             )
 
             self.mask_estimators.append(mask_estimator)
