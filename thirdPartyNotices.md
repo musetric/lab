@@ -10,7 +10,7 @@ in their distributed packages.
 
 - Source: https://github.com/Anjok07/ultimatevocalremovergui
 - Usage: MDX-Net ONNX inference flow, model tensor layout, chunked demix / overlap-add behavior, and compatibility with UVR-trained MDX models.
-- Local files: `musetric_toolkit/separate_audio/mdx_net_separator.py`, `musetric_toolkit/separate_audio/main.py`.
+- Local files: `musetric_toolkit/separate_audio/mdx_net_separator.py`.
 - License: MIT.
 - License source: upstream README; no repository license file was found when this notice was prepared.
 - Credit: Ultimate Vocal Remover GUI / UVR developers, including Anjok07 and aufr33; original MDX-Net AI code credited upstream to Kuielab and Woosung Choi.
@@ -20,8 +20,8 @@ The upstream repository README asks third-party application developers who use U
 ## AI4future/RVC - UVR_MDXNET_KARA_2.onnx
 
 - Source: https://huggingface.co/AI4future/RVC
-- Usage: `UVR_MDXNET_KARA_2.onnx` model downloaded at runtime for lead/backing vocal separation.
-- Local files: `musetric_toolkit/common/envs.py`, `musetric_toolkit/separate_audio/main.py`.
+- Usage: `UVR_MDXNET_KARA_2.onnx`, the teacher of the lead/backing split of the distillation recipe.
+- Local files: `musetric_toolkit/distill/voices.py`.
 - License: MIT.
 - License source: Hugging Face model card metadata.
 
@@ -29,7 +29,7 @@ The upstream repository README asks third-party application developers who use U
 
 - Source: https://github.com/TRvlvr/application_data
 - Usage: MDX model hash-to-parameter metadata (`mdx_model_data/model_data_new.json`) used to configure UVR-compatible MDX models.
-- Local files: `musetric_toolkit/common/envs.py`, `musetric_toolkit/separate_audio/mdx_net_separator.py`.
+- Local files: `musetric_toolkit/separate_audio/mdx_net_separator.py`.
 - License: no repository license file was found when this notice was prepared.
 
 ## DeepExtract
@@ -95,8 +95,8 @@ SOFTWARE.
 ## Aname-Tommy/Mel-Band-Roformer_Duality
 
 - Source: https://huggingface.co/Aname-Tommy/Mel-Band-Roformer_Duality, revision `07a189ffdceb69db0ddacc5175569bef59850016`.
-- Usage: checkpoint (`duality_v1.ckpt`) and config (`config_v1.yaml`) downloaded at runtime for vocal/instrumental separation, and the source of the ONNX core exported by `scripts/onnx/roformer`.
-- Local files: `musetric_toolkit/common/envs.py`, `musetric_toolkit/separate_audio/main.py`, `musetric_toolkit/separate_audio/mel_band_roformer_separator.py`, `scripts/onnx/roformer/converting.md`.
+- Usage: checkpoint (`duality_v1.ckpt`) and config (`config_v1.yaml`), the teacher of the distillation recipe and the source of the ONNX core exported by `scripts/onnx/roformer`.
+- Local files: `musetric_toolkit/distill/teacher.py`, `scripts/onnx/roformer/converting.md`.
 - License: Apache-2.0.
 - License source: Hugging Face model card metadata.
 - Lineage: fine-tuned from SYH99999/MelBandRoformerMergedSYHFTBeta1 (MIT), which builds on KimberleyJSN/melbandroformer (MIT); checked by comparing the weights.
@@ -125,7 +125,7 @@ specific language governing permissions and limitations under the License.
 
 - Source: https://huggingface.co/musetric/mel-band-roformer-duality-kara2-student, revision `8f928dd73899dd9279a878d732841919a98e61e6`.
 - Usage: weights (`model.safetensors`) and config (`config.yaml`) of the separation model the product runs, downloaded as the torch original of the vocals parity reference, and the source of the ONNX core exported by `scripts/onnx/roformer/build_lead_backing_onnx.py`.
-- Local files: `musetric_toolkit/common/envs.py`, `musetric_toolkit/parity_audio/vocals_chain.py`, `musetric_toolkit/separate_audio/roformer/lead_backing_roformer.py`, `scripts/onnx/roformer/build_lead_backing_onnx.py`, `scripts/onnx/roformer/converting.md`.
+- Local files: `musetric_toolkit/common/envs.py`, `musetric_toolkit/separate_audio/student_separator.py`, `musetric_toolkit/separate_audio/roformer/lead_backing_roformer.py`, `scripts/onnx/roformer/build_lead_backing_onnx.py`, `scripts/onnx/roformer/converting.md`.
 - License: Apache-2.0, as the weights of Aname-Tommy/Mel-Band-Roformer_Duality it starts from (above, with the license text).
 - Lineage: distilled from Aname-Tommy/Mel-Band-Roformer_Duality by Musetric on openly licensed audio, with a split distilled from UVR MDX-Net KARA 2 (MIT, above); the shape and the training are described on its model card.
 
@@ -133,7 +133,7 @@ specific language governing permissions and limitations under the License.
 
 - Source: https://github.com/nomadkaraoke/python-audio-separator
 - Usage: Research tool that helped validate the BS-RoFormer approach and integration patterns.
-- Local files: `musetric_toolkit/separate_audio/mel_band_roformer_separator.py`, `musetric_toolkit/separate_audio/roformer_utils.py`.
+- Local files: `musetric_toolkit/separate_audio/roformer_utils.py`.
 - License: MIT.
 - License source: upstream `LICENSE`.
 

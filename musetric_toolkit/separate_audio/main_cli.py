@@ -32,7 +32,7 @@ def parse_arguments():
         "--sample-rate",
         required=True,
         type=int,
-        help="Sample rate for separation",
+        help="Sample rate of the written stems",
     )
     parser.add_argument(
         "--models-path",

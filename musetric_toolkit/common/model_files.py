@@ -3,7 +3,6 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import urlopen
 
-from musetric_toolkit.common import envs
 from musetric_toolkit.common.logger import send_message
 
 CHUNK_SIZE = 1024 * 1024
@@ -52,31 +51,6 @@ def _download_file(url: str, destination: Path, label: str) -> None:
                 )
     except (HTTPError, URLError) as error:
         raise RuntimeError(f"Failed to download {label}: {error}") from error
-
-
-def ensure_model_files(
-    model_checkpoint_path: Path,
-    config_path: Path,
-) -> None:
-    for label, url, path in (
-        ("Model checkpoint", envs.model_checkpoint_url, model_checkpoint_path),
-        ("Model configuration", envs.model_config_url, config_path),
-    ):
-        if path.exists():
-            size = path.stat().st_size
-            send_message(
-                {
-                    "type": "download",
-                    "label": label,
-                    "file": path.name,
-                    "downloaded": size,
-                    "total": size,
-                    "status": "cached",
-                }
-            )
-            continue
-
-        _download_file(url, path, label)
 
 
 def ensure_model_file(url: str, path: Path, label: str) -> None:
