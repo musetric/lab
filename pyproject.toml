@@ -13,7 +13,7 @@ dependencies = [
     "numba==0.65.1",
     "PyYAML==6.0.3",
     "platformdirs==4.10.0",
-    "whisperx==3.8.6",
+    "transformers==4.51.3",
     "hf-xet==1.5.1",
     "beat-this==1.1.0",
     "soundfile==0.14.0",

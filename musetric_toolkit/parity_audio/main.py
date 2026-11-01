@@ -4,6 +4,7 @@ from musetric_toolkit.common.logger import send_message
 from musetric_toolkit.parity_audio import (
     chords_chain,
     key_chain,
+    lines_chain,
     rhythm_chain,
     transcribe_chain,
     vocals_chain,
@@ -17,6 +18,7 @@ CHAINS = {
     "key": key_chain.run,
     "chords": chords_chain.run,
     "transcribe": transcribe_chain.run,
+    "lines": lines_chain.run,
 }
 
 

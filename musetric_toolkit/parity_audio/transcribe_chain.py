@@ -3,42 +3,26 @@ from pathlib import Path
 import numpy as np
 import onnxruntime as ort
 import torch
+from transformers import GenerationConfig, WhisperFeatureExtractor
+from transformers.modeling_outputs import BaseModelOutput
 
 from musetric_toolkit.common.logger import send_message
 from musetric_toolkit.parity_audio.case_writer import CaseWriter
 from musetric_toolkit.parity_audio.host_audio import POWER, read_mono
+from musetric_toolkit.transcribe_audio.rounding import js_round
+from musetric_toolkit.transcribe_audio.whisper_decoder import (
+    decode_budget,
+    generate_tokens,
+    load_original,
+    token_times,
+)
 
 SAMPLE_RATE = 16000
 CHUNK_SAMPLES = 30 * SAMPLE_RATE
-ENCODER_POSITION_SAMPLES = 320
-ENCODER_POSITIONS = 1500
-MAX_DECODE_TOKENS = 400
-MIN_DECODE_TOKENS = 32
-TOKENS_PER_SECOND = 12
 END_OF_TEXT = 50257
-ORIGINAL_ID = "openai/whisper-large-v3-turbo"
-ORIGINAL_REVISION = "41f01f3fe87f28c78e2fbf8b568835947dd65ed9"
 DECODER_FILE = "decoder_model_merged_fp16.onnx"
 CROSS_FILE = "cross_kv_fp16.onnx"
 BRANCH_INPUT = "use_cache_branch"
-MEDIAN_FILTER_WIDTH = 7
-TIME_PRECISION = 0.02
-
-
-def js_round(value: float) -> int:
-    return int(np.floor(value + 0.5))
-
-
-def decode_budget(samples: int) -> tuple[int, int]:
-    positions = min(ENCODER_POSITIONS, js_round(samples / ENCODER_POSITION_SAMPLES))
-    seconds = samples / SAMPLE_RATE
-    budget = min(
-        MAX_DECODE_TOKENS,
-        max(
-            MIN_DECODE_TOKENS, js_round(seconds * TOKENS_PER_SECOND) + MIN_DECODE_TOKENS
-        ),
-    )
-    return positions, budget
 
 
 def cpu_session(path: Path) -> ort.InferenceSession:
@@ -64,68 +48,6 @@ def text_rows(tokens: list[int], times: list[float]) -> np.ndarray:
         if token < END_OF_TEXT
     ]
     return np.asarray(rows, dtype=np.float64).reshape(-1, 2)
-
-
-def median_filter(row: np.ndarray, width: int) -> np.ndarray:
-    half = width // 2
-    length = row.shape[0]
-    index = np.abs(np.arange(length)[:, None] + np.arange(-half, half + 1)[None, :])
-    index = np.where(index >= length, 2 * (length - 1) - index, index)
-    return np.sort(row[index], axis=1)[:, half]
-
-
-def dynamic_time_warping(matrix: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    rows, columns = matrix.shape
-    cost = np.full((rows + 1, columns + 1), np.inf)
-    cost[0, 0] = 0
-    trace = np.full((rows + 1, columns + 1), -1)
-    for column in range(1, columns + 1):
-        for row in range(1, rows + 1):
-            moves = (
-                cost[row - 1, column - 1],
-                cost[row - 1, column],
-                cost[row, column - 1],
-            )
-            if moves[0] < moves[1] and moves[0] < moves[2]:
-                move = 0
-            elif moves[1] < moves[0] and moves[1] < moves[2]:
-                move = 1
-            else:
-                move = 2
-            cost[row, column] = matrix[row - 1, column - 1] + moves[move]
-            trace[row, column] = move
-    trace[0, :] = 2
-    trace[:, 0] = 1
-    text, time = [], []
-    row, column = rows, columns
-    while row > 0 or column > 0:
-        text.append(row - 1)
-        time.append(column - 1)
-        move = trace[row, column]
-        row -= 1 if move in (0, 1) else 0
-        column -= 1 if move in (0, 2) else 0
-    return np.asarray(text[::-1]), np.asarray(time[::-1])
-
-
-def token_times(
-    cross_attentions, heads: list[list[int]], positions: int, prompt_length: int
-) -> np.ndarray:
-    weights = np.stack(
-        [
-            cross_attentions[layer][0, head, :, :positions].float().cpu().numpy()
-            for layer, head in heads
-        ]
-    )
-    mean = weights.mean(axis=1, keepdims=True)
-    std = weights.std(axis=1, keepdims=True)
-    weights = (weights - mean) / std
-    weights = np.stack(
-        [[median_filter(row, MEDIAN_FILTER_WIDTH) for row in head] for head in weights]
-    )
-    matrix = weights[:, prompt_length:].mean(axis=0)
-    text, time = dynamic_time_warping(-matrix.astype(np.float64))
-    jumps = np.concatenate([[True], np.diff(text) != 0])
-    return time[jumps] * TIME_PRECISION
 
 
 def empty_past(session: ort.InferenceSession) -> dict[str, np.ndarray]:
@@ -190,30 +112,10 @@ def teacher_forced_onnx(
     return np.concatenate(logits).astype(np.float64)
 
 
-def load_original(device: torch.device):
-    from transformers import WhisperForConditionalGeneration  # noqa: PLC0415
-
-    model = WhisperForConditionalGeneration.from_pretrained(
-        ORIGINAL_ID,
-        revision=ORIGINAL_REVISION,
-        torch_dtype=torch.float32,
-        attn_implementation="eager",
-    )
-    return model.to(device).eval()
-
-
 def run(args, writer: CaseWriter) -> None:
-    from transformers import (  # noqa: PLC0415
-        GenerationConfig,
-        WhisperFeatureExtractor,
-    )
-    from transformers.modeling_outputs import BaseModelOutput  # noqa: PLC0415
-
     bundle = Path(args.onnx).parent
     language = args.language
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    torch.backends.cuda.matmul.allow_tf32 = False
-    torch.backends.cudnn.allow_tf32 = False
 
     audio = read_mono(args.audio_path, SAMPLE_RATE, POWER)[:CHUNK_SAMPLES]
     samples = audio.shape[0]
@@ -245,18 +147,15 @@ def run(args, writer: CaseWriter) -> None:
     writer.tensor("encoder.output", "onnx-cpu", onnx_encoded)
 
     send_message({"type": "progress", "progress": 0.4})
-    reference = model.generate(
-        input_features=features_t,
-        encoder_outputs=encoder_outputs,
-        generation_config=config,
-        language=language,
-        task="transcribe",
+    tokens = generate_tokens(
+        model,
+        config,
+        features_t,
+        encoder_outputs,
+        language,
         return_timestamps=True,
-        return_token_timestamps=True,
         max_new_tokens=budget,
-        num_frames=2 * positions,
     )
-    tokens = [int(token) for token in reference["sequences"][0].tolist()]
     generated = generated_tokens(tokens, timestamp_begin)
     forced = prompt + generated + [END_OF_TEXT]
     writer.tensor("decoder.tokens", "reference", np.asarray(forced), "int32")

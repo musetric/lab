@@ -96,13 +96,7 @@ def configure_third_party_logging(log_level: str) -> None:
     target_level = logging.ERROR if log_level == "error" else logging.WARNING
     prefixes = (
         "huggingface_hub",
-        "lightning",
-        "pytorch_lightning",
-        "pyannote",
-        "pyannote.audio",
-        "speechbrain",
         "torchaudio",
-        "whisperx",
     )
 
     for logger_name in prefixes:
