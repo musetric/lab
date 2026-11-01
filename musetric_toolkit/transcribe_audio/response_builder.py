@@ -1,46 +1,25 @@
-def build_payload_words(words: list) -> list:
-    payload_words = []
-    for word in words or []:
-        text = (word.get("word") or "").strip()
-        start = word.get("start")
-        end = word.get("end")
-        if not text or start is None or end is None:
-            continue
-        payload_words.append(
-            {
-                "start": float(start),
-                "end": float(end),
-                "text": text,
-            }
-        )
-    return payload_words
+def _build_payload_words(words: list[dict]) -> list[dict]:
+    return [
+        {"start": word["start"], "end": word["end"], "text": word["text"].strip()}
+        for word in words
+        if word["text"].strip()
+    ]
 
 
-def build_fallback_word(text: str, start: float, end: float) -> dict:
-    return {
-        "start": start,
-        "end": end,
-        "text": text,
-    }
-
-
-def build_payload_segments(segments: list) -> list:
+def build_payload_segments(segments: list[dict]) -> list[dict]:
     payload_segments = []
     for segment in segments:
-        text = (segment.get("text") or "").strip()
+        text = segment["text"].strip()
         if not text:
             continue
-        start = float(segment["start"])
-        end = float(segment["end"])
-        payload_words = build_payload_words(segment.get("words", []))
-        if not payload_words:
-            payload_words = [build_fallback_word(text, start, end)]
+        start, end = segment["start"], segment["end"]
+        payload_words = _build_payload_words(segment.get("words", []))
         payload_segments.append(
             {
                 "start": start,
                 "end": end,
                 "text": text,
-                "words": payload_words,
+                "words": payload_words or [{"start": start, "end": end, "text": text}],
             }
         )
     return payload_segments

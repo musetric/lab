@@ -8,8 +8,7 @@ the lab has no issues of its own.
 ## Installation
 
 - An NVIDIA GPU on Linux or Windows on x86_64; torch is the CUDA 12.9 build of
-  the PyTorch index, held at 2.8.0: whisperx 3.8.6 requires `torch~=2.8.0`,
-  `torchaudio~=2.8.0` and `torchvision~=0.23.0`.
+  the PyTorch index, held at 2.8.0.
 - `onnxruntime-gpu` 1.30.0, which runs the lead and backing model of
   `musetric-separate`, is a CUDA 13.0 build and needs CUDA 13 and cuDNN 9
   ([requirements](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html#requirements)).
@@ -43,8 +42,9 @@ musetric-separate --source-path song.wav --lead-path lead.flac \
   --backing-path backing.flac --instrumental-path instrumental.flac --sample-rate 48000
 ```
 
-`musetric-transcribe` writes the lyrics of the lead vocal with WhisperX
-(`--backing-path` adds the backing vocals at half level), `musetric-rhythm` the
+`musetric-transcribe` writes the lyrics of the lead vocal as the app does, with
+Whisper in torch (`--backing-path` adds the backing vocals at half level),
+`musetric-rhythm` the
 BPM, beats and downbeats of Beat This!, `musetric-key` the key of S-KEY and
 `musetric-chords` the timed chords of ChordMini, each as JSON:
 
@@ -73,6 +73,9 @@ on the CPU and the author's inference: every stage boundary a raw little-endian
 ```bash
 musetric-parity --step vocals --audio-path song.wav --onnx model.onnx --case-path case
 ```
+
+`--step lines` runs the whole transcription on the lead and on `--backing-path`,
+and writes the voice it heard and the words and line breaks it wrote.
 
 ## License
 

@@ -159,52 +159,11 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-## WhisperX
-
-- Source: https://github.com/m-bain/whisperX
-- Usage: Speech-to-text and word-level alignment for `musetric-transcribe`.
-- Local files: `musetric_toolkit/transcribe_audio/whisperx_runner.py`, `musetric_toolkit/transcribe_audio/language_detector.py`, `musetric_toolkit/transcribe_audio/main.py`.
-- License: BSD 2-Clause.
-- License source: installed package license file and upstream `LICENSE`.
-
-BSD 2-Clause License
-
-Copyright (c) 2024, Max Bain
-
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions are met:
-
-1. Redistributions of source code must retain the above copyright notice, this
-   list of conditions and the following disclaimer.
-
-2. Redistributions in binary form must reproduce the above copyright notice,
-   this list of conditions and the following disclaimer in the documentation
-   and/or other materials provided with the distribution.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-## OpenAI Whisper - mobiuslabsgmbh/faster-whisper-large-v3-turbo
-
-- Source: https://huggingface.co/mobiuslabsgmbh/faster-whisper-large-v3-turbo
-- Usage: base speech-to-text weights behind `musetric-transcribe`. WhisperX loads `large-v3-turbo` through faster-whisper, which downloads this CTranslate2 conversion of `openai/whisper-large-v3-turbo` at runtime.
-- Local files: `musetric_toolkit/transcribe_audio/whisperx_runner.py`.
-- License: MIT.
-- License source: Hugging Face model card metadata.
-
 ## OpenAI Whisper - openai/whisper-large-v3-turbo
 
 - Source: https://huggingface.co/openai/whisper-large-v3-turbo, revision `41f01f3fe87f28c78e2fbf8b568835947dd65ed9`.
-- Usage: the original weights in torch behind the transcription reference of `musetric-parity`, downloaded at runtime.
-- Local files: `musetric_toolkit/parity_audio/transcribe_chain.py`.
+- Usage: the original weights in torch behind `musetric-transcribe` and the transcription reference of `musetric-parity`, downloaded at runtime.
+- Local files: `musetric_toolkit/transcribe_audio/whisper_decoder.py`.
 - License: MIT.
 - License source: the Hugging Face model card metadata at that revision, and the `LICENSE` of https://github.com/openai/whisper. The card declared `apache-2.0` only in its first days; revision `41f01f3f` of 2024-10-04 changed it to `mit`.
 
@@ -233,7 +192,7 @@ SOFTWARE.
 ## Transformers.js
 
 - Source: https://github.com/huggingface/transformers.js
-- Usage: vendored ONNX conversion scripts (`scripts/convert.py`, `scripts/quantize.py`, `scripts/extra/whisper.py`) used to export Whisper to the transformers.js ONNX layout with cross-attention alignment heads. Only the whisper code path is exercised. The transcription reference of `musetric-parity` ports the token timestamps of its Whisper pipeline (`medianFilter`, `dynamic_time_warping`, `_extract_token_timestamps`).
+- Usage: vendored ONNX conversion scripts (`scripts/convert.py`, `scripts/quantize.py`, `scripts/extra/whisper.py`) used to export Whisper to the transformers.js ONNX layout with cross-attention alignment heads. Only the whisper code path is exercised. `musetric_toolkit/transcribe_audio/whisper_decoder.py` ports the token timestamps of its Whisper pipeline (`medianFilter`, `dynamic_time_warping`, `_extract_token_timestamps`), and `musetric_toolkit/transcribe_audio/word_chunks.py` its word grouping (`_decode_asr`, `collateWordTimestamps`, `mergePunctuations`).
 - Local files: `scripts/onnx/whisper/convert.py`, `scripts/onnx/whisper/quantize.py`, `scripts/onnx/whisper/extra/whisper.py`, `musetric_toolkit/parity_audio/transcribe_chain.py`.
 - License: Apache-2.0.
 - License source: upstream `LICENSE`.

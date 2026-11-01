@@ -25,7 +25,7 @@ _HALLUCINATION_PATTERNS = [
 _COMPILED = [re.compile(pattern, re.IGNORECASE) for pattern in _HALLUCINATION_PATTERNS]
 
 
-def _is_hallucination(text: str) -> bool:
+def is_hallucination(text: str) -> bool:
     stripped = text.strip()
     if not stripped:
         return False
@@ -33,11 +33,7 @@ def _is_hallucination(text: str) -> bool:
 
 
 def filter_hallucinated_segments(segments: list[dict]) -> list[dict]:
-    return [
-        segment
-        for segment in segments
-        if not _is_hallucination(segment.get("text", ""))
-    ]
+    return [segment for segment in segments if not is_hallucination(segment["text"])]
 
 
 _SIGN_OFF = re.compile(
@@ -53,9 +49,7 @@ def _is_sign_off(text: str) -> bool:
 
 
 def filter_sign_off_segments(segments: list[dict]) -> list[dict]:
-    return [
-        segment for segment in segments if not _is_sign_off(segment.get("text", ""))
-    ]
+    return [segment for segment in segments if not _is_sign_off(segment["text"])]
 
 
 _NOT_AFTER_LETTER = r"(?<![^\W\d_])"
@@ -79,34 +73,20 @@ _CREDIT_PHRASES = [
 ]
 
 
-def _word_end(text: str, index: int) -> int:
-    while index < len(text) and not text[index].isspace():
-        index += 1
-    return index
-
-
-def strip_credits(text: str) -> str:
-    spans = sorted(
-        (match.start(), _word_end(text, match.end()))
-        for pattern in _CREDIT_PHRASES
-        for match in pattern.finditer(text)
-    )
-    if not spans:
-        return text
-    kept = []
-    position = 0
-    for start, end in spans:
-        if start > position:
-            kept.append(text[position:start])
-        position = max(position, end)
-    kept.append(text[position:])
-    return " ".join("".join(kept).split())
-
-
-def strip_credit_segments(segments: list[dict]) -> list[dict]:
-    stripped = []
-    for segment in segments:
-        text = strip_credits(segment.get("text", ""))
-        if text:
-            stripped.append({**segment, "text": text})
-    return stripped
+def drop_credit_words(words: list[dict]) -> list[dict]:
+    starts = []
+    text = ""
+    for word in words:
+        text += " " if text else ""
+        starts.append(len(text))
+        text += word["text"]
+    ranges = [
+        match.span() for pattern in _CREDIT_PHRASES for match in pattern.finditer(text)
+    ]
+    if not ranges:
+        return words
+    return [
+        word
+        for word, start in zip(words, starts, strict=True)
+        if not any(low <= start < high for low, high in ranges)
+    ]

@@ -7,7 +7,7 @@ import warnings
 from musetric_toolkit.common.logger import redirect_std_streams, setup_logging
 from musetric_toolkit.common.paths import default_models_path
 
-STEPS = ["vocals", "rhythm", "key", "chords", "transcribe"]
+STEPS = ["vocals", "rhythm", "key", "chords", "transcribe", "lines"]
 
 
 def configure_warning_filters(log_level: str) -> None:
@@ -41,6 +41,10 @@ def parse_arguments():
         "--audio-path",
         required=True,
         help="Audio of the case",
+    )
+    parser.add_argument(
+        "--backing-path",
+        help="Backing vocals of the case, added at half level; the lines step takes it",
     )
     parser.add_argument(
         "--onnx",
