@@ -2,17 +2,20 @@
 
 The lab keeps the torch implementation as the reference path and CLI default.
 This directory exports its neural network core to ONNX and checks that core
-through Python `onnxruntime`. One recipe builds two cores: the teacher's,
+through Python `onnxruntime`. One recipe builds three cores: the teacher's,
 [Aname's Mel-Band RoFormer Duality](https://huggingface.co/Aname-Tommy/Mel-Band-Roformer_Duality),
-and the student distilled from it
+the student distilled from it
 ([musetric/musetric#1081](https://github.com/musetric/musetric/issues/1081)),
+and the student that also splits the vocals into lead and backing
+([musetric/musetric#1084](https://github.com/musetric/musetric/issues/1084)),
 which `musetric` runs on desktop and on phones alike.
 
 A core (`--core-only`) maps `stft_repr [1, 2050, 1100, 2]` to
 `masks [1, 2050, 1100, 2]`, float32 in and out, at a window of T = 1100 frames
 fixed at build time; the STFT, iSTFT, chunking and overlap-add stay in the
-host. The published files are on the model cards of [the teacher's core](https://huggingface.co/musetric/aname-mel-band-roformer-duality-onnx)
-and [the student's](https://huggingface.co/musetric/mel-band-roformer-duality-student-onnx).
+host. The published files are on the model cards of [the teacher's core](https://huggingface.co/musetric/aname-mel-band-roformer-duality-onnx),
+[the student's](https://huggingface.co/musetric/mel-band-roformer-duality-student-onnx)
+and [the splitting student's](https://huggingface.co/musetric/mel-band-roformer-duality-kara2-student-onnx).
 
 ## Build a Core
 
