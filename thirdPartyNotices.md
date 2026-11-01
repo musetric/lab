@@ -100,7 +100,7 @@ SOFTWARE.
 - License: Apache-2.0.
 - License source: Hugging Face model card metadata.
 - Lineage: fine-tuned from SYH99999/MelBandRoformerMergedSYHFTBeta1 (MIT), which builds on KimberleyJSN/melbandroformer (MIT); checked by comparing the weights.
-- Students: the teacher and the starting weights of musetric/mel-band-roformer-duality-student (below).
+- Students: the teacher and the starting weights of musetric/mel-band-roformer-duality-student and musetric/mel-band-roformer-duality-kara2-student (below).
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use
 these files except in compliance with the License. You may obtain a copy of the
@@ -116,10 +116,18 @@ specific language governing permissions and limitations under the License.
 ## musetric/mel-band-roformer-duality-student
 
 - Source: https://huggingface.co/musetric/mel-band-roformer-duality-student, revision `c9d2c65a65d820bdd4efdc7d62bb348998969592`.
-- Usage: weights (`model.safetensors`) and config (`config.yaml`) of the vocals model the product runs, downloaded as the torch original of the vocals parity reference, and the source of the ONNX core exported by `scripts/onnx/roformer/build_student_onnx.py`.
-- Local files: `musetric_toolkit/common/envs.py`, `musetric_toolkit/parity_audio/vocals_chain.py`, `musetric_toolkit/separate_audio/roformer/pooled_mel_band_roformer.py`, `scripts/onnx/roformer/build_student_onnx.py`, `scripts/onnx/roformer/converting.md`.
+- Usage: weights (`model.safetensors`) and config (`config.yaml`), the source of the ONNX core exported by `scripts/onnx/roformer/build_student_onnx.py`.
+- Local files: `musetric_toolkit/separate_audio/roformer/pooled_mel_band_roformer.py`, `scripts/onnx/roformer/build_student_onnx.py`, `scripts/onnx/roformer/converting.md`.
 - License: Apache-2.0, as the weights of Aname-Tommy/Mel-Band-Roformer_Duality it starts from (above, with the license text).
 - Lineage: distilled from Aname-Tommy/Mel-Band-Roformer_Duality by Musetric on openly licensed audio; the shape and the training are described on its model card.
+
+## musetric/mel-band-roformer-duality-kara2-student
+
+- Source: https://huggingface.co/musetric/mel-band-roformer-duality-kara2-student, revision `8f928dd73899dd9279a878d732841919a98e61e6`.
+- Usage: weights (`model.safetensors`) and config (`config.yaml`) of the separation model the product runs, downloaded as the torch original of the vocals parity reference, and the source of the ONNX core exported by `scripts/onnx/roformer/build_lead_backing_onnx.py`.
+- Local files: `musetric_toolkit/common/envs.py`, `musetric_toolkit/parity_audio/vocals_chain.py`, `musetric_toolkit/separate_audio/roformer/lead_backing_roformer.py`, `scripts/onnx/roformer/build_lead_backing_onnx.py`, `scripts/onnx/roformer/converting.md`.
+- License: Apache-2.0, as the weights of Aname-Tommy/Mel-Band-Roformer_Duality it starts from (above, with the license text).
+- Lineage: distilled from Aname-Tommy/Mel-Band-Roformer_Duality by Musetric on openly licensed audio, with a split distilled from UVR MDX-Net KARA 2 (MIT, above); the shape and the training are described on its model card.
 
 ## python-audio-separator
 

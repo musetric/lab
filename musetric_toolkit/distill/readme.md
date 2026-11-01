@@ -51,7 +51,7 @@ vocals; the lead is the vocals minus the backing, so the two sum to the
 vocals. Its labels are the student's own vocals and KARA 2's backing of them,
 taken at the volume compensation of KARA 2's model data, which
 `label-voices` writes to `teacher.json` of the labels: the part of the
-vocals that today's cascade takes out.
+vocals that the cascade of the student and KARA 2 takes out.
 
 ```bash
 musetric-distill label-voices --student student --kara kara2 --corpus open --manifest voices.json --labels voices

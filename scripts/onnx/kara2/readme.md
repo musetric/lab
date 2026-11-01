@@ -1,7 +1,9 @@
 # UVR-MDX-NET KARA2 → WebGPU graph with time bands in the batch
 
-The lead/backing separation step runs `kara2.onnx`, which `fold_time_bands.py`
-builds from the UVR release file `UVR_MDXNET_KARA_2.onnx`, a convolutional
+The product's lead and backing step ran `kara2.onnx` until
+[musetric/musetric#1157](https://github.com/musetric/musetric/pull/1157) moved
+the split into the separation model. `fold_time_bands.py` builds it from the UVR
+release file `UVR_MDXNET_KARA_2.onnx`, a convolutional
 U-Net over a `[1, 4, 2048, 256]` complex spectrogram. The fold keeps every
 operator of the source and holds each tensor of the U-Net body, `[1, C, T, F]`
 in the source, as `[B, C, T / B, F]`: `B` consecutive bands of time frames, one
