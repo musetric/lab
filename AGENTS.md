@@ -9,7 +9,7 @@
 
 ## Repository Map
 
-- `musetric_toolkit/separate_audio`: audio source separation (MelBandRoformer, MDX-Net, FFmpeg).
+- `musetric_toolkit/separate_audio`: audio source separation (the one-pass student, MDX-Net for the distillation recipe, FFmpeg).
 - `musetric_toolkit/transcribe_audio`: speech transcription via WhisperX.
 - `musetric_toolkit/rhythm_audio`: tempo, beat, and rhythm analysis.
 - `musetric_toolkit/rhythm_bench`: the beats the metronome would click, their counts of musetric/musetric#1108 and listening renders (`musetric-rhythm-bench`).
