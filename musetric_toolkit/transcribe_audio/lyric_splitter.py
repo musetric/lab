@@ -1,4 +1,5 @@
 UPPERCASE_SPLIT_MIN_LINE_DURATION = 1.2
+SOFT_PUNCT_SPLIT_MIN_WORDS = 6
 
 
 def _starts_with_upper(text: str) -> bool:
@@ -10,6 +11,10 @@ def _starts_with_upper(text: str) -> bool:
 
 def _ends_with_strong_punct(text: str) -> bool:
     return text.endswith((".", "!", "?"))
+
+
+def _ends_with_soft_punct(text: str) -> bool:
+    return text.endswith((",", ";", ":"))
 
 
 def _join_words(words: list) -> str:
@@ -52,11 +57,15 @@ def _split_words_on_capitalization(words: list) -> list:
         if line_start is not None:
             line_duration = max(0.0, float(prev_word["end"]) - float(line_start))
         if (
-            _starts_with_upper(text)
-            and not _starts_with_upper(prev_text)
-            and (
-                _ends_with_strong_punct(prev_text)
-                or line_duration >= UPPERCASE_SPLIT_MIN_LINE_DURATION
+            _ends_with_strong_punct(prev_text)
+            or (
+                _ends_with_soft_punct(prev_text)
+                and len(current) >= SOFT_PUNCT_SPLIT_MIN_WORDS
+            )
+            or (
+                _starts_with_upper(text)
+                and not _starts_with_upper(prev_text)
+                and line_duration >= UPPERCASE_SPLIT_MIN_LINE_DURATION
             )
         ):
             lines.append(current)

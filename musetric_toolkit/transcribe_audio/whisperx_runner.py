@@ -29,6 +29,7 @@ from musetric_toolkit.separate_audio.system_info import (
 from musetric_toolkit.transcribe_audio.download_progress import (
     intercept_hf_downloads,
 )
+from musetric_toolkit.transcribe_audio.flat_windows import repair_flat_windows
 from musetric_toolkit.transcribe_audio.hallucination_filter import (
     _is_hallucination,
     filter_hallucinated_segments,
@@ -691,6 +692,18 @@ def split_windows_in_halves(model, compaction, segments, aligned_segments, langu
     return segments, replaced
 
 
+def decode_flat_windows(model, compaction, segments, language):
+    def decode_prompted(window, prompt):
+        clip = compaction.audio[
+            int(float(window["start"]) * SAMPLE_RATE) : int(
+                float(window["end"]) * SAMPLE_RATE
+            )
+        ]
+        return _decode_span(model, clip, language, {"initial_prompt": prompt})
+
+    return repair_flat_windows(compaction.chunks, segments, decode_prompted)
+
+
 def load_voice(audio_path: str, backing_path: str | None):
     audio = whisperx.load_audio(audio_path)
     if backing_path:
@@ -784,6 +797,8 @@ def transcribe_with_whisperx(
         )
         if candidates:
             segments = apply_collapse_repairs(candidates, segments, aligner)
+
+        segments = decode_flat_windows(model, compaction, segments, detected_language)
 
     segments = strip_credit_segments(segments)
     segments = filter_silent_segments(segments, compacted_audio)
