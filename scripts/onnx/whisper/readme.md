@@ -27,21 +27,21 @@ task stays `auto`; the graphs land in `tmp/whisper-export/openai/whisper-large-v
 ```bash
 uv run python scripts/onnx/whisper/mobile_encoder.py --input X --output Y  # q4 encoder
 uv run python scripts/onnx/whisper/fp16_decoder.py --input X --output Y  # fp32 merged decoder to float16
-uv run python scripts/onnx/whisper/mobile_decoder.py --input X --output Y  # both merged decoders
-uv run python scripts/onnx/whisper/trim_cross_attentions.py --input X --output Y --generation-config G  # both
-uv run python scripts/onnx/whisper/pack_step_outputs.py --input X --output Y --generation-config G  # both
+uv run python scripts/onnx/whisper/mobile_decoder.py --input X --output Y  # fp16 decoder
+uv run python scripts/onnx/whisper/trim_cross_attentions.py --input X --output Y --generation-config G  # fp16 decoder
+uv run python scripts/onnx/whisper/pack_step_outputs.py --input X --output Y --generation-config G  # fp16 decoder
 uv run python scripts/onnx/whisper/flatten_decoder_step.py --input X --step Y --cross Z  # fp16 decoder
 uv run python scripts/onnx/whisper/scale_residual_stream.py --input X --output Y  # fp16 step
 ```
 
 - `mobile_encoder.py` runs `block_attention.py`, `conv_to_matmul.py` and `transpose_to_gather.py`, `mobile_decoder.py` runs `pad_attention_scores.py`; both are idempotent, and each inner pass also runs alone.
-- `trim_cross_attentions.py` rewrites the generation config in place: run it once per repository, and give the q4 decoder a copy of the original.
-- `flatten_decoder_step.py` takes the fp16 decoder only; the q4 decoder stays merged.
+- `trim_cross_attentions.py` rewrites the generation config in place: run it once per repository.
 - A pass keys the nodes it replaces by their position in `graph.node`, never by `id(node)`.
 
-`stage_whisper.py` copies the published set flat into the clone of the model
-repository, refusing a graph that skipped its mobile pass; the model card holds
-each file's contract, and the [practice of models](https://github.com/musetric/headquarters/blob/main/practices/models.md) the publication.
+`stage_whisper.py` writes the published set flat into the clone of the model
+repository, every graph with its weights beside it in `<graph>_data`, and
+refuses a graph that skipped its mobile pass; the model card holds each file's
+contract, and the [practice of models](https://github.com/musetric/headquarters/blob/main/practices/models.md) the publication.
 
 To find the graph a provider gets wrong, transformers.js takes `device` as a map
 keyed by file name, such as `{ encoder_model: 'webgpu', decoder_model_merged: 'wasm' }`,

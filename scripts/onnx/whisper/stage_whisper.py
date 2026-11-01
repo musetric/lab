@@ -2,7 +2,6 @@
 
 import argparse
 import contextlib
-import shutil
 import sys
 from pathlib import Path
 
@@ -14,7 +13,9 @@ with contextlib.suppress(Exception):
     sys.stdout.reconfigure(encoding="utf-8")
 
 ENCODER = "encoder_model_q4.onnx"
-DECODERS = ["decoder_model_merged_fp16.onnx", "decoder_model_merged_q4.onnx"]
+DATA_SUFFIX = "_data"
+EXTERNAL_THRESHOLD = 1024
+DECODER = "decoder_model_merged_fp16.onnx"
 
 DEFAULT_DEST = (
     Path(__file__).resolve().parents[4] / "models" / "whisper-large-v3-turbo-onnx"
@@ -35,7 +36,6 @@ PUBLISH_FILES = [
     "encoder_model_q4.onnx",
     "decoder_model_merged_fp16.onnx",
     "cross_kv_fp16.onnx",
-    "decoder_model_merged_q4.onnx",
 ]
 
 
@@ -67,26 +67,35 @@ def main() -> None:
         )
     print(f"checked {ENCODER}: mobile-safe")
 
-    for name in DECODERS:
-        decoder = source_path(export, name)
-        reasons = mobile_decoder.verify(onnx.load(str(decoder)))
-        if reasons:
-            listing = "\n  ".join(reasons)
-            raise SystemExit(
-                f"{decoder} would compute wrong on a mobile GPU:\n  {listing}\n"
-                f"run mobile_decoder.py over it before staging"
-            )
-        print(f"checked {name}: mobile-safe")
+    decoder = source_path(export, DECODER)
+    reasons = mobile_decoder.verify(onnx.load(str(decoder)))
+    if reasons:
+        listing = "\n  ".join(reasons)
+        raise SystemExit(
+            f"{decoder} would compute wrong on a mobile GPU:\n  {listing}\n"
+            f"run mobile_decoder.py over it before staging"
+        )
+    print(f"checked {DECODER}: mobile-safe")
 
     for rel in PUBLISH_FILES:
         source = source_path(export, rel)
         target = dest / rel
         target.parent.mkdir(parents=True, exist_ok=True)
         if rel.endswith(".onnx"):
-            shutil.copy2(source, target)
+            data = target.with_name(f"{target.name}{DATA_SUFFIX}")
+            data.unlink(missing_ok=True)
+            onnx.save_model(
+                onnx.load(str(source)),
+                str(target),
+                save_as_external_data=True,
+                all_tensors_to_one_file=True,
+                location=data.name,
+                size_threshold=EXTERNAL_THRESHOLD,
+            )
+            print(f"staged {rel} and {data.name}")
         else:
             target.write_bytes(source.read_bytes().replace(b"\r\n", b"\n"))
-        print(f"staged {rel}")
+            print(f"staged {rel}")
     print(f"staged {len(PUBLISH_FILES)} files into {dest}")
 
 
