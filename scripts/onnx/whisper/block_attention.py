@@ -105,6 +105,12 @@ def find_attentions(model):
 def rewrite(model, attentions, block):
     graph = model.graph
     known = {init.name for init in graph.initializer}
+    node_indices = {
+        output: index
+        for index, node in enumerate(graph.node)
+        for output in node.output
+        if output
+    }
 
     def constant(name, value):
         if name not in known:
@@ -169,18 +175,18 @@ def rewrite(model, attentions, block):
                 axis=1,
             )
         )
-        replacements[id(attention.context)] = nodes
+        replacements[node_indices[attention.context.output[0]]] = nodes
 
     dropped = set()
     for attention in attentions:
         for node in (attention.score, attention.softmax, attention.reshape):
             if node is not None:
-                dropped.add(id(node))
+                dropped.add(node_indices[node.output[0]])
     rebuilt = []
-    for node in graph.node:
-        if id(node) in dropped:
+    for index, node in enumerate(graph.node):
+        if index in dropped:
             continue
-        rebuilt.extend(replacements.get(id(node), [node]))
+        rebuilt.extend(replacements.get(index, [node]))
     del graph.node[:]
     graph.node.extend(rebuilt)
     prune(graph)

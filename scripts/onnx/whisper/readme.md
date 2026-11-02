@@ -14,6 +14,7 @@ The export runs in an isolated uv environment of `requirements.txt` on Python
 
 - `transformers` 4.42.4: 4.43 adds a `cache_position` decoder input that the runtime does not feed.
 - `torch` 2.4.1: its `torch.onnx.export` is the TorchScript exporter that `optimum` 1.21.3 takes.
+- The converter traces batch 1, the batch the final mobile encoder accepts.
 
 ```bash
 PYTHONPATH=scripts/onnx uv run --no-project --python 3.11 --with-requirements scripts/onnx/whisper/requirements.txt python -m whisper.convert --model_id openai/whisper-large-v3-turbo --quantize --modes q4 --output_attentions --skip_validation --output_parent_dir tmp/whisper-export
