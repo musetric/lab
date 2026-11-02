@@ -7,12 +7,12 @@ the lab has no issues of its own.
 
 ## Installation
 
-- An NVIDIA GPU on Linux or Windows on x86_64; torch is the CUDA 12.9 build of
-  the PyTorch index, held at 2.8.0.
-- `onnxruntime-gpu` 1.30.0, which runs the lead and backing model of
-  `musetric-separate`, is a CUDA 13.0 build and needs CUDA 13 and cuDNN 9
+- An NVIDIA GPU on Linux or Windows on x86_64; torch is the CUDA 13.2 build of
+  the PyTorch index.
+- `onnxruntime-gpu` is a CUDA 13.0 build and needs CUDA 13 and cuDNN 9
   ([requirements](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html#requirements)).
-- The `export` group pins onnx 1.22.0 and onnxscript 0.7.1 ([musetric/lab#72](https://github.com/musetric/lab/pull/72)).
+- The `export` group holds the ONNX export tools; Whisper's converter has its
+  own environment in [scripts/onnx/whisper](scripts/onnx/whisper/readme.md).
 - The commands are installed from this clone, editable, so that the scripts of
   Musetric that call them, such as `measure:parity`, run the clone's code:
 

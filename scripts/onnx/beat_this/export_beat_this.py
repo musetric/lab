@@ -113,6 +113,7 @@ def export_model(model: BeatThisFrames, path: Path) -> None:
         str(path),
         input_names=["spect"],
         output_names=["beat", "downbeat"],
+        dynamo=False,
         dynamic_axes={
             "spect": {0: "windows", 1: "frames"},
             "beat": {0: "windows", 1: "frames"},

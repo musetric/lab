@@ -3,10 +3,10 @@
 import argparse
 import os
 import time
+from pathlib import Path
 
 import onnx
 from onnxconverter_common import float16
-from optimum.onnx.graph_transformations import check_and_save_model
 
 
 def subgraph_free_names(graph: onnx.GraphProto) -> set[str]:
@@ -43,18 +43,19 @@ def node_dependencies(node: onnx.NodeProto) -> set[str]:
 def toposort_graph(graph: onnx.GraphProto) -> None:
     produced = {init.name for init in graph.initializer}
     produced.update(value.name for value in graph.input)
-    deps = {id(node): node_dependencies(node) for node in graph.node}
-    pending = list(graph.node)
+    nodes = list(graph.node)
+    deps = [node_dependencies(node) for node in nodes]
+    pending = list(range(len(nodes)))
     ordered = []
     while pending:
-        ready = [node for node in pending if deps[id(node)] <= produced]
+        ready = [index for index in pending if deps[index] <= produced]
         if not ready:
             raise RuntimeError(f"cycle or missing producer among {len(pending)} nodes")
-        for node in ready:
-            produced.update(node.output)
-        ordered.extend(ready)
-        ready_ids = {id(node) for node in ready}
-        pending = [node for node in pending if id(node) not in ready_ids]
+        for index in ready:
+            produced.update(nodes[index].output)
+        ordered.extend(nodes[index] for index in ready)
+        ready_indices = set(ready)
+        pending = [index for index in pending if index not in ready_indices]
     del graph.node[:]
     graph.node.extend(ordered)
 
@@ -111,6 +112,29 @@ def keep_fp32_outputs(graph: onnx.GraphProto, prefixes: tuple[str, ...]) -> int:
     return len(selected)
 
 
+def check_and_save_model(model: onnx.ModelProto, output: Path) -> None:
+    large = model.ByteSize() >= onnx.checker.MAXIMUM_PROTOBUF
+    data = output.with_name(f"{output.name}_data")
+    if large:
+        data.unlink(missing_ok=True)
+        onnx.save_model(
+            model,
+            str(output),
+            save_as_external_data=True,
+            all_tensors_to_one_file=True,
+            location=data.name,
+            convert_attribute=True,
+        )
+    try:
+        onnx.checker.check_model(str(output) if large else model)
+    except onnx.checker.ValidationError as error:
+        if "No Op registered for" not in str(error):
+            raise
+    if not large:
+        data.unlink(missing_ok=True)
+        onnx.save_model(model, str(output), convert_attribute=True)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", required=True, help="fp32 graph to convert")
@@ -142,7 +166,7 @@ def main() -> None:
     toposort_graph(graph)
 
     os.makedirs(os.path.dirname(args.output), exist_ok=True)
-    check_and_save_model(converted, args.output)
+    check_and_save_model(converted, Path(args.output))
     print(
         f"{inputs} float32 input(s), {outputs} float32 output(s), "
         f"{os.path.getsize(args.output)} bytes in {time.time() - started:.1f}s"

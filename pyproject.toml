@@ -1,11 +1,11 @@
 [project]
 name = "musetric-lab"
 version = "0.0.1"
-requires-python = "==3.13.11"
+requires-python = "==3.14.10"
 dependencies = [
-    "torch==2.8.0",
-    "torchaudio==2.8.0",
-    "torchvision==0.23.0",
+    "torch==2.15.0",
+    "torchaudio==2.11.1",
+    "torchvision==0.29.2",
     "rotary-embedding-torch==0.8.9",
     "safetensors==0.7.0",
     "einops==0.8.2",
@@ -19,7 +19,7 @@ dependencies = [
     "soundfile==0.14.0",
     "nnAudio==0.3.4",
     "librosa==0.11.0",
-    "onnxruntime-gpu==1.30.0",
+    "onnxruntime-gpu==1.31.1",
     "swift-f0==0.3.0",
     "torchcrepe==0.0.24",
     "torchfcpe==0.0.4",
@@ -39,7 +39,7 @@ musetric-rhythm-bench = "musetric_toolkit.rhythm_bench.main_cli:main_cli"
 musetric-distill = "musetric_toolkit.distill.main_cli:main_cli"
 
 [tool.uv]
-required-version = "==0.13.5"
+required-version = "==0.13.6"
 environments = [
     "sys_platform == 'linux' and platform_machine == 'x86_64'",
     "sys_platform == 'win32' and platform_machine == 'AMD64'",
@@ -47,14 +47,14 @@ environments = [
 override-dependencies = ["onnxruntime; sys_platform == 'no-such-platform'"]
 
 [[tool.uv.index]]
-name = "pytorch-cu129"
-url = "https://download.pytorch.org/whl/cu129"
+name = "pytorch-cu132"
+url = "https://download.pytorch.org/whl/cu132"
 explicit = true
 
 [tool.uv.sources]
-torch = { index = "pytorch-cu129" }
-torchaudio = { index = "pytorch-cu129" }
-torchvision = { index = "pytorch-cu129" }
+torch = { index = "pytorch-cu132" }
+torchaudio = { index = "pytorch-cu132" }
+torchvision = { index = "pytorch-cu132" }
 madmom = { git = "https://github.com/CPJKU/madmom", rev = "27f032e8947204902c675e5e341a3faf5dc86dae" }
 
 [dependency-groups]
@@ -64,9 +64,9 @@ check = [
     "ruff==0.15.17",
 ]
 export = [
-    "onnx==1.22.0",
+    "onnx==1.23.2",
     "onnxconverter-common==1.16.0",
-    "onnxscript==0.7.1",
+    "onnxscript==0.7.2",
 ]
 pitch-research = [
     "matplotlib==3.10.8",
@@ -83,6 +83,7 @@ build-backend = "hatchling.build"
 packages = ["musetric_toolkit"]
 
 [tool.black]
+target-version = ["py313"]
 exclude = "(.venv|tmp/|musetric_toolkit/chords_audio/chordmini|musetric_toolkit/key_audio/skey|musetric_toolkit/pitch_audio/rmvpe|scripts/onnx/whisper/(convert|quantize)\\.py|scripts/onnx/whisper/extra)"
 
 [tool.isort]
@@ -101,6 +102,7 @@ skip_glob = [
 ]
 
 [tool.ruff]
+target-version = "py313"
 exclude = [
     ".venv",
     "musetric_toolkit/chords_audio/chordmini",

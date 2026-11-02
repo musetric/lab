@@ -4,8 +4,8 @@
 # See http://www.apache.org/licenses/LICENSE-2.0 and this repo's
 # thirdPartyNotices.md.
 #
-# Local changes: package-relative import of `quantize`; only the whisper code
-# path is exercised.
+# Local changes: package-relative import of `quantize` and batch-one tracing;
+# only the whisper code path is exercised.
 
 import json
 import os
@@ -267,6 +267,7 @@ def main():
     export_kwargs = dict(
         model_name_or_path=model_id,
         output=output_model_folder,
+        batch_size=1,
         task=conv_args.task,
         do_validation=not conv_args.skip_validation,
         _variant=conv_args.variant,

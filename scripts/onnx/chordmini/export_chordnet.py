@@ -215,6 +215,7 @@ def main() -> None:
         str(onnx_path),
         input_names=[INPUT_NAME],
         output_names=[OUTPUT_NAME],
+        dynamo=False,
         dynamic_axes={INPUT_NAME: {0: "windows"}, OUTPUT_NAME: {0: "windows"}},
         opset_version=OPSET,
     )

@@ -100,6 +100,7 @@ def main() -> None:
         str(onnx_path),
         input_names=["audio"],
         output_names=["probs"],
+        dynamo=False,
         dynamic_axes={"audio": {1: "samples"}},
         opset_version=OPSET,
     )
