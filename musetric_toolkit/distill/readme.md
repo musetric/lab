@@ -56,7 +56,7 @@ vocals that the cascade of the student and KARA 2 takes out.
 ```bash
 musetric-distill label-voices --student student --kara kara2 --corpus open --manifest voices.json --labels voices
 musetric-distill train-voices --student student --labels voices --out split
-musetric-distill data-ccmixter-voices --crawl ccmixter-crawl --out ccmixter-voices
+musetric-distill data-ccmixter-voices --crawl ccmixter-crawl --spec ccmixter_voices.json --out ccmixter-voices
 musetric-distill score-voices --student student --kara kara2 --cascade --checkpoint split/split.pt --golden ccmixter-voices/mix --out scores.json
 musetric-distill release-voices --student student --checkpoint split/split.pt --labels voices --corpus open --out release
 ```
@@ -71,4 +71,6 @@ cascade of the student and KARA 2 against true lead and backing stems.
 `data-ccmixter-voices` builds such a set from ccMixter a cappellas whose lead
 and backing parts are separate uploads (CC BY and CC0), as `acappella/` and,
 over the upload's own instrument stems, `mix/`; it is evaluation only, and its
-uploaders are kept out of training.
+uploaders are kept out of training. Which uploads and files make the set is data,
+kept as an artifact of musetric/musetric#1084 and never in the repository
+(`gh issue artifact download 1084 1 -R musetric/musetric --output ccmixter_voices.json`).

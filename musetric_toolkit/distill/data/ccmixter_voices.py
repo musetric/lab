@@ -11,7 +11,6 @@ from musetric_toolkit.separate_audio.ffmpeg.write import write_audio_file
 
 LOG = logging.getLogger(__name__)
 
-SPEC = Path(__file__).with_name("ccmixter_voices.json")
 SAMPLE_RATE = 44100
 CHECK_RATE = 11025
 MAX_LAG_SECONDS = 2.0
@@ -209,8 +208,8 @@ def add_parser(commands, common) -> None:
     )
     parser.add_argument(
         "--spec",
+        required=True,
         type=Path,
-        default=SPEC,
         help="JSON of the uploads and which of their files are lead, backing, "
         "accompaniment and the reference mix",
     )
