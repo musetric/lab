@@ -4,7 +4,7 @@ from collections import Counter
 
 import numpy as np
 
-from musetric_toolkit.distill.excluded import excluded_ids
+from musetric_toolkit.distill.excluded import read_excluded
 from musetric_toolkit.listening.frozen_rule import Rule, frozen_rule
 from musetric_toolkit.listening.levels import letter_words, window_level_db
 from musetric_toolkit.listening.round_files import (
@@ -185,7 +185,9 @@ def add_own_repeats(order: list[dict], rng, args: argparse.Namespace) -> None:
         insert_far_from(order, copy, original, rng, args.repeat_distance)
 
 
-def earlier_repeats(rng, args: argparse.Namespace, excluded: set[str]) -> list[dict]:
+def earlier_repeats(
+    rng, args: argparse.Namespace, excluded: frozenset[str]
+) -> list[dict]:
     folder = args.repeats_from
     key = read_json(folder / KEY)
     labels = read_json(folder / LABELS)
@@ -222,7 +224,7 @@ def check_inputs(args: argparse.Namespace) -> None:
         raise ValueError("the detector groups need --rule-features")
 
 
-def select_clips(args: argparse.Namespace, excluded: set[str]) -> list[dict]:
+def select_clips(args: argparse.Namespace, excluded: frozenset[str]) -> list[dict]:
     check_inputs(args)
     rng = np.random.default_rng(args.seed)
     rule = frozen_rule(args.rule_features) if args.rule_features else None
@@ -250,4 +252,4 @@ def select_clips(args: argparse.Namespace, excluded: set[str]) -> list[dict]:
 
 
 def select_command(args: argparse.Namespace) -> None:
-    write_json(args.out, select_clips(args, excluded_ids()))
+    write_json(args.out, select_clips(args, read_excluded(args.excluded)))

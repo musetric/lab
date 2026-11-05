@@ -9,7 +9,7 @@ import numpy as np
 import soundfile
 from PIL import Image
 
-from musetric_toolkit.distill.excluded import excluded_ids
+from musetric_toolkit.distill.excluded import read_excluded
 from musetric_toolkit.listening.levels import QUIET_POWER
 from musetric_toolkit.listening.round_files import (
     ASK_PRESENT,
@@ -179,6 +179,6 @@ def check_round_command(args) -> None:
     check_blind(manifest, key, verdict)
     check_clips(manifest, key, args, verdict)
     log_summary(manifest, key)
-    check_origins(manifest, key, args, excluded_ids(), verdict)
+    check_origins(manifest, key, args, read_excluded(args.excluded), verdict)
     LOG.info("%s %d", "FAILED" if verdict.failures else "all passed", verdict.failures)
     sys.exit(1 if verdict.failures else 0)

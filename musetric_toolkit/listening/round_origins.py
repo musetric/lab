@@ -93,7 +93,7 @@ def check_own_repeats(key: dict, order: list[str], args, verdict: Verdict) -> No
             verdict.fail(f"{clip}: the mix differs from {twins[0]}")
 
 
-def check_earlier_repeats(key: dict, args, excluded: set[str], verdict: Verdict):
+def check_earlier_repeats(key: dict, args, excluded: frozenset[str], verdict: Verdict):
     rounds = rounds_by_name(args.earlier_round)
     for clip, entry in key.items():
         found = split_earlier_repeat(entry.get("repeat_of", ""))
@@ -185,14 +185,14 @@ def check_levels(key: dict, args, verdict: Verdict) -> None:
     log_live_levels(key, live, args)
 
 
-def log_excluded(key: dict, excluded: set[str]) -> None:
+def log_excluded(key: dict, excluded: frozenset[str]) -> None:
     clips = [clip for clip, entry in key.items() if entry["source"] in excluded]
     if clips:
         LOG.warning("clips of tracks excluded since: %s", clips)
 
 
 def check_origins(
-    manifest: dict, key: dict, args, excluded: set[str], verdict: Verdict
+    manifest: dict, key: dict, args, excluded: frozenset[str], verdict: Verdict
 ) -> None:
     order = [clip["id"] for clip in manifest["clips"]]
     if args.corpus:

@@ -95,7 +95,7 @@ def label_row(clip: str, entry: dict, label: dict, genre: str | None) -> dict:
     )
 
 
-def load_round(folder: Path, excluded: set[str]) -> list[dict]:
+def load_round(folder: Path, excluded: frozenset[str]) -> list[dict]:
     labels = read_json(folder / LABELS)
     key = read_json(folder / KEY)
     selection = {

@@ -6,7 +6,6 @@ import numpy as np
 import torch
 
 from musetric_toolkit.distill.corpus import FULL_SCALE, INT16_MAX
-from musetric_toolkit.distill.excluded import without_excluded
 from musetric_toolkit.distill.inference import overlap_add
 from musetric_toolkit.distill.precision import PRECISION
 from musetric_toolkit.distill.scores import rms, sdr
@@ -101,12 +100,17 @@ def load_label(labels: Path, track_id: str, kind: str) -> np.ndarray:
     )
 
 
-def held_out_scores(model, labels: Path, limit: int) -> list[dict]:
-    index = without_excluded(json.loads((labels / "voices.json").read_text()))
+def held_out_scores(
+    model, labels: Path, limit: int, excluded: frozenset[str]
+) -> list[dict]:
+    index = json.loads((labels / "voices.json").read_text())
     held = [
         t
         for t in index
-        if t["role"] == "held" and not t["pell"] and t["vocal_share"] >= VOICED_SHARE
+        if t["role"] == "held"
+        and not t["pell"]
+        and t["vocal_share"] >= VOICED_SHARE
+        and t["id"] not in excluded
     ][:limit]
     scale = backing_scale(labels)
     rows = []

@@ -3,6 +3,8 @@ import importlib
 import logging
 from pathlib import Path
 
+from musetric_toolkit.distill.excluded import add_excluded
+
 SKIP_GENRES = ["Old-Time / Historic", "Spoken"]
 SEARCHED_WINDOWS = [0, 4, 8, 11]
 OWN_REPEATS = "detector_quiet=2,detector_loud=1,random=1,reverse_words=1"
@@ -334,6 +336,7 @@ def add_select(commands, common) -> None:
     add_windows(parser)
     add_select_quotas(parser)
     add_select_limits(parser)
+    add_excluded(parser)
     parser.add_argument(
         "--levels", required=True, type=Path, help="JSONL written by scan"
     )
@@ -409,6 +412,7 @@ def add_check_round(commands, common) -> None:
     add_corpus(parser, required=False)
     add_voices(parser, required=False)
     add_earlier(parser)
+    add_excluded(parser)
     parser.add_argument("--round", required=True, type=Path, help="Folder of the round")
     parser.add_argument(
         "--min-sum-snr-db",
@@ -494,6 +498,7 @@ def add_features(commands, common) -> None:
     )
     add_corpus(parser)
     add_whisper(parser)
+    add_excluded(parser)
     parser.add_argument("--round", required=True, type=Path, help="Folder of the round")
     parser.add_argument(
         "--echonest", type=Path, help="echonest.csv of the FMA metadata"
@@ -557,6 +562,7 @@ def add_report(commands, common) -> None:
     )
     add_earlier(parser)
     add_report_lists(parser)
+    add_excluded(parser)
     parser.add_argument("--round", required=True, type=Path, help="Folder of the round")
     parser.add_argument("--out", type=Path, help="File for the report")
     parser.add_argument(

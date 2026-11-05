@@ -6,6 +6,7 @@ from pathlib import Path
 import torch
 from safetensors.torch import save_file
 
+from musetric_toolkit.distill.excluded import add_excluded, read_excluded
 from musetric_toolkit.distill.losses import multi_stft_l1
 from musetric_toolkit.distill.precision import PRECISION
 from musetric_toolkit.distill.teacher import load_teacher, warm_rotary
@@ -80,6 +81,25 @@ def write_snapshot(folder: Path, model, release: Path) -> None:
     save_file(weights, folder / "model.safetensors")
 
 
+def make_sampler(args, step: int) -> VerdictSampler:
+    excluded = read_excluded(args.excluded)
+    withheld = frozenset(args.withheld.read_text("utf-8").split()) | excluded
+    verdicts = read_verdicts(args.verdicts)
+    options = VerdictOptions(
+        remix=args.remix,
+        backing=args.backing_share,
+        pell=args.pell_share,
+        share=args.share,
+    )
+    return VerdictSampler(
+        args.labels,
+        args.seed + step,
+        options,
+        [row for row in verdicts if row["id"] not in excluded],
+        withheld,
+    )
+
+
 def train_verdicts(args) -> None:
     args.out.mkdir(parents=True, exist_ok=True)
     torch.manual_seed(args.seed)
@@ -105,20 +125,7 @@ def train_verdicts(args) -> None:
         model.load_state_dict(state["model"])
         optimizer.load_state_dict(state["optimizer"])
         step, before = state["step"], state["elapsed"]
-    withheld = frozenset(args.withheld.read_text("utf-8").split())
-    options = VerdictOptions(
-        remix=args.remix,
-        backing=args.backing_share,
-        pell=args.pell_share,
-        share=args.share,
-    )
-    sampler = VerdictSampler(
-        args.labels,
-        args.seed + step,
-        options,
-        read_verdicts(args.verdicts),
-        withheld,
-    )
+    sampler = make_sampler(args, step)
     prefetch = Prefetcher(sampler, args.batch, FIELDS)
     model.train()
     millions = sum(param.numel() for param in params) / 1e6
@@ -185,6 +192,7 @@ def add_parser(commands, common) -> None:
     parser.add_argument(
         "--withheld", required=True, type=Path, help="withheld.txt of `verdicts`"
     )
+    add_excluded(parser)
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--minutes", type=float, default=120.0)
     parser.add_argument(

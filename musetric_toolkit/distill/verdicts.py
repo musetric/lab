@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
-from musetric_toolkit.distill.excluded import excluded_ids
+from musetric_toolkit.distill.excluded import add_excluded, read_excluded
 
 LOG = logging.getLogger(__name__)
 
@@ -67,11 +67,14 @@ def early_answers(folder: Path, seconds: float) -> set[str]:
 
 
 def round_rows(
-    folder: Path, doubtful: set[str], artists: dict[str, str], seconds: float
+    folder: Path,
+    doubtful: set[str],
+    artists: dict[str, str],
+    seconds: float,
+    excluded: frozenset[str],
 ) -> list[dict]:
     labels = json.loads((folder / "labels.json").read_text("utf-8"))
     key = json.loads((folder / "key.json").read_text("utf-8"))
-    excluded = excluded_ids()
     early = early_answers(folder, seconds)
     rows = []
     for clip, entry in key.items():
@@ -128,9 +131,10 @@ def build_verdicts(args) -> None:
     corpus = json.loads(args.corpus.read_text("utf-8"))
     artists = {clip["id"]: clip["artist"] for clip in corpus}
     doubtful = set(args.doubtful)
+    excluded = read_excluded(args.excluded)
     rows = []
     for folder in args.round:
-        rows += round_rows(folder, doubtful, artists, args.clip_seconds)
+        rows += round_rows(folder, doubtful, artists, args.clip_seconds, excluded)
     assign_uses(rows, args.test_share, args.seed)
     with open(args.out / "verdicts.csv", "w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=COLUMNS, lineterminator="\n")
@@ -158,6 +162,7 @@ def add_parser(commands, common) -> None:
     parser.add_argument(
         "--corpus", required=True, type=Path, help="fma.json with id and artist"
     )
+    add_excluded(parser)
     parser.add_argument(
         "--doubtful",
         nargs="*",
