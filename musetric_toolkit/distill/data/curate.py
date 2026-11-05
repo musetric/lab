@@ -13,7 +13,7 @@ import soundfile as sf
 from musetric_toolkit.distill.corpus import load
 from musetric_toolkit.distill.data.duplicates import within
 from musetric_toolkit.distill.data.fma_fetch import raw_tracks
-from musetric_toolkit.distill.excluded import excluded_ids
+from musetric_toolkit.distill.excluded import add_excluded, read_excluded
 from musetric_toolkit.distill.teacher import SAMPLE_RATE
 
 LOG = logging.getLogger(__name__)
@@ -364,9 +364,6 @@ def decide(row: dict, skipped: dict[str, str], decisions: dict[str, dict]) -> No
     if row["id"] in decisions:
         row["decision"] = decisions[row["id"]]["decision"]
         row["reason"] = decisions[row["id"]]["reason"]
-    if row["id"] in excluded_ids():
-        row["decision"] = "trash"
-        row["reason"] = EXCLUDED_REASON
     if row["decision"] == "trash":
         row["role"] = ""
 
@@ -413,6 +410,8 @@ def build(args) -> list[dict]:
     measured(rows, args)
     skipped = skipped_in_labelling(args.label_logs)
     decisions = {r["id"]: r for r in read_rows(args.decisions)}
+    for track in read_excluded(args.excluded):
+        decisions[track] = dict(decision="trash", reason=EXCLUDED_REASON)
     for row in rows:
         decide(row, skipped, decisions)
     note_artists(rows, open_count)
@@ -683,6 +682,7 @@ def add_parser(commands, common) -> None:
         type=Path,
         help="CSV of hand-made decisions (id, decision, reason) over the rules",
     )
+    add_excluded(parser)
     parser.add_argument(
         "--label-logs",
         type=Path,

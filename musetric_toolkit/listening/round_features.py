@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import soundfile
 
-from musetric_toolkit.distill.excluded import excluded_ids
+from musetric_toolkit.distill.excluded import read_excluded
 from musetric_toolkit.listening.listener import Listener
 from musetric_toolkit.listening.round_files import (
     CLIPS,
@@ -60,7 +60,7 @@ def add_features(row: dict, sides: dict, folder: Path, listener: Listener) -> No
 
 def features_command(args) -> None:
     key = read_json(args.round / KEY)
-    rows = load_round(args.round, excluded_ids())
+    rows = load_round(args.round, read_excluded(args.excluded))
     tracks = corpus_tracks(args.corpus)
     echonest = echonest_rows(args.echonest)
     listener = Listener(args.batch)

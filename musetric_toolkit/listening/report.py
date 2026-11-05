@@ -1,7 +1,7 @@
 import argparse
 import sys
 
-from musetric_toolkit.distill.excluded import excluded_ids
+from musetric_toolkit.distill.excluded import read_excluded
 from musetric_toolkit.listening.frozen_rule import frozen_rule
 from musetric_toolkit.listening.report_after import after_sections
 from musetric_toolkit.listening.report_ticks import (
@@ -46,7 +46,7 @@ def ticks_report(args: argparse.Namespace, duration: float) -> list[str]:
     return [*plan_sections(tick), *after_sections(tick, duration)]
 
 
-def round_report(args: argparse.Namespace, excluded: set[str]) -> str:
+def round_report(args: argparse.Namespace, excluded: frozenset[str]) -> str:
     manifest = read_json(args.round / MANIFEST)
     if manifest.get("ask") == ASK_PRESENT:
         lines = ticks_report(args, manifest["duration"])
@@ -57,7 +57,7 @@ def round_report(args: argparse.Namespace, excluded: set[str]) -> str:
 
 
 def report_command(args: argparse.Namespace) -> None:
-    text = round_report(args, excluded_ids())
+    text = round_report(args, read_excluded(args.excluded))
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(text, encoding="utf-8")
