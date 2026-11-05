@@ -15,7 +15,7 @@ and the evaluation on MUSDB18-HQ. The flags of a subcommand are in its `--help`.
 - Training uses openly licensed audio only, and the released student lists it (`release-credits`); MUSDB18-HQ is for evaluation only.
 - A listener's verdicts and hand-made decisions are input files of `data-curate`, never code.
 - `release-convert` keeps writing the published weights byte for byte from the training checkpoint of `long-gate`.
-- `--excluded` names the CSV of the tracks a listener took out of the data for good, kept on the tracker and never in the repository. `train-voices`, `train-verdicts` and `verdicts` refuse to run without it, and `data-curate` writes the tracks to `dataset.csv` as trash for the commands that read it. A track leaves the list only by a decision of the owner.
+- `--excluded` names the CSV of the tracks a listener took out of the data for good, kept as an artifact of musetric/musetric#1203 and never in the repository (`gh issue artifact download 1203 1 -R musetric/musetric --output excluded.csv`). `train-voices`, `train-verdicts` and `verdicts` refuse to run without it, and `data-curate` writes the tracks to `dataset.csv` as trash for the commands that read it. A track leaves the list only by a decision of the owner.
 
 ## Commands
 
