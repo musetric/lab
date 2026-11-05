@@ -5,6 +5,8 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 
+from musetric_toolkit.distill.excluded import without_excluded
+
 HELD_OTHER = {"jw-dust", "ccm-winter-sunlight", "jamalt-en-rxbyn-bad-side"}
 VOCAL_SHARE_MIN = 0.1
 FULL_SCALE = 2.0
@@ -83,7 +85,7 @@ def usable(index: list[dict], rows: dict[str, dict]) -> list[dict]:
 def held_tracks(index: list[dict]) -> list[dict]:
     return [
         t
-        for t in index
+        for t in without_excluded(index)
         if t["role"] == "held" and t.get("vocal_share", 1.0) >= VOCAL_SHARE_MIN
     ]
 

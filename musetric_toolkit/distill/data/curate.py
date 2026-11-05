@@ -13,6 +13,7 @@ import soundfile as sf
 from musetric_toolkit.distill.corpus import load
 from musetric_toolkit.distill.data.duplicates import within
 from musetric_toolkit.distill.data.fma_fetch import raw_tracks
+from musetric_toolkit.distill.excluded import excluded_ids
 from musetric_toolkit.distill.teacher import SAMPLE_RATE
 
 LOG = logging.getLogger(__name__)
@@ -73,6 +74,7 @@ PELL_GENRE = "a cappella"
 SPOKEN = "Spoken"
 HISTORIC = "Old-Time / Historic"
 REJECTED_NOTE = "instrumental (no lead vocal)"
+EXCLUDED_REASON = "excluded by a listener"
 VOICED = ("vocal", "vocal-only")
 
 INSTRUMENTAL_DB = -40
@@ -362,6 +364,9 @@ def decide(row: dict, skipped: dict[str, str], decisions: dict[str, dict]) -> No
     if row["id"] in decisions:
         row["decision"] = decisions[row["id"]]["decision"]
         row["reason"] = decisions[row["id"]]["reason"]
+    if row["id"] in excluded_ids():
+        row["decision"] = "trash"
+        row["reason"] = EXCLUDED_REASON
     if row["decision"] == "trash":
         row["role"] = ""
 

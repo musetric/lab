@@ -15,6 +15,7 @@ from musetric_toolkit.distill.corpus import (
     FlacTrack,
     label_files,
 )
+from musetric_toolkit.distill.excluded import without_excluded
 from musetric_toolkit.distill.losses import quiet_gate
 from musetric_toolkit.distill.teacher import CHUNK, HOP, SAMPLE_RATE
 
@@ -65,6 +66,7 @@ class Sampler:
             for t in index
             if t["role"] == "train" and t["seconds"] * SAMPLE_RATE > CHUNK + SAMPLE_RATE
         ]
+        train = without_excluded(train)
         self.load_tracks(labels, train)
         self.kinds = [
             "pell" if t.get("pell") else content.get(t["id"], "vocal") for t in train

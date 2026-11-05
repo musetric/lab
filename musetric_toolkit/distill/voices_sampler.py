@@ -6,6 +6,7 @@ import numpy as np
 import torch
 
 from musetric_toolkit.distill.corpus import FULL_SCALE, INT16_MAX
+from musetric_toolkit.distill.excluded import without_excluded
 from musetric_toolkit.distill.teacher import CHUNK
 from musetric_toolkit.distill.voices import backing_scale
 
@@ -40,7 +41,13 @@ def rms(a: np.ndarray) -> float:
 
 
 class VoicesSampler:
-    def __init__(self, labels: Path, seed: int, options: VoicesOptions):
+    def __init__(
+        self,
+        labels: Path,
+        seed: int,
+        options: VoicesOptions,
+        withheld: frozenset[str] = frozenset(),
+    ):
         self.rng = np.random.default_rng(seed)
         self.options = options
         self.scales = dict(
@@ -50,8 +57,11 @@ class VoicesSampler:
         train = [
             t
             for t in index
-            if t["role"] == "train" and t["seconds"] * 44100 > CHUNK + 44100
+            if t["role"] == "train"
+            and t["seconds"] * 44100 > CHUNK + 44100
+            and t["id"] not in withheld
         ]
+        train = without_excluded(train)
         self.songs = [t for t in train if not t["pell"]]
         self.voiced = [t for t in self.songs if t["vocal_share"] >= VOICED_SHARE]
         self.pells = [t for t in train if t["pell"] and t["vocal_share"] >= PELL_SHARE]
