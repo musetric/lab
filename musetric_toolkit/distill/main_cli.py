@@ -34,6 +34,10 @@ EXTENSIONS = [
     "musetric_toolkit.distill.voices_training",
     "musetric_toolkit.distill.voices_scores",
     "musetric_toolkit.distill.voices_release",
+    "musetric_toolkit.distill.voices_paired",
+    "musetric_toolkit.distill.verdicts",
+    "musetric_toolkit.distill.verdict_training",
+    "musetric_toolkit.distill.verdict_scores",
 ]
 NEW_PARTS = (
     r"^(detail_paths|mask_estimators)\.|^layers\.[01]\.[01]\.layers\.0\.0\."

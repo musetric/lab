@@ -1,0 +1,1324 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title data-text="pageTitle"></title>
+<style>
+:root {
+  --bg: #2a2a2a; --panel: #1d1d1d; --panel2: #333; --line: #444; --text: #eee; --dim: #a8a8a8;
+  --accent: #90caf9; --ok: #81c784; --warn: #ffb74d; --bad: #ef9a9a;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--text); font: 14px/1.35 system-ui, "Segoe UI", sans-serif; display: flex; flex-direction: column; }
+button { font: inherit; color: var(--text); background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button.on { background: #27465e; border-color: var(--accent); color: var(--accent); }
+button:disabled { opacity: .4; cursor: default; }
+kbd { font: 11px ui-monospace, Consolas, monospace; color: var(--dim); border: 1px solid var(--line); border-radius: 3px; padding: 0 3px; margin-left: 4px; }
+header { display: flex; align-items: center; gap: 12px; padding: 8px 12px; background: var(--panel); border-bottom: 1px solid var(--line); }
+header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+#status { margin-left: auto; color: var(--dim); }
+#status.bad { color: var(--bad); }
+main { flex: 1; min-height: 0; display: flex; }
+#list { width: 112px; overflow-y: auto; background: var(--panel); border-right: 1px solid var(--line); padding: 6px; }
+#list button { display: flex; width: 100%; gap: 6px; align-items: center; margin-bottom: 3px; padding: 3px 6px; background: transparent; border-color: transparent; text-align: left; }
+#list button.current { background: #27465e; border-color: var(--accent); }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: #666; flex: none; }
+.dot.touched { background: var(--warn); }
+.dot.done { background: var(--ok); }
+.count { margin-left: auto; color: var(--dim); font-size: 12px; }
+#center { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 8px 10px; gap: 8px; }
+.row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+#plot { flex: 1; min-height: 300px; position: relative; background: #000; border-radius: 6px; overflow: hidden; }
+#plot canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
+#loading[hidden] { display: none; }
+#loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.6); color: var(--dim); }
+#readout { font-variant-numeric: tabular-nums; color: var(--dim); min-width: 190px; }
+label.slider { display: inline-flex; align-items: center; gap: 6px; color: var(--dim); }
+input[type=range] { width: 90px; accent-color: var(--accent); }
+#selection { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px; min-height: 92px; }
+#selection .hint { color: var(--dim); }
+#selinfo { color: var(--dim); font-variant-numeric: tabular-nums; }
+.cls { display: inline-flex; align-items: center; gap: 5px; }
+.swatch { width: 10px; height: 10px; border-radius: 2px; }
+#intro { color: var(--dim); font-size: 13px; }
+#intro b { color: var(--text); }
+#cards { display: flex; flex-direction: column; gap: 10px; }
+.card { border: 1px solid var(--line); border-radius: 8px; padding: 8px 9px; display: flex; flex-direction: column; gap: 6px; background: #262626; }
+.card.listening { border-color: var(--accent); }
+.card.missing { border-color: var(--bad); box-shadow: inset 0 0 0 1px var(--bad); }
+.card h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.card h3 small { color: var(--dim); font-size: 12px; font-weight: 400; margin-left: 4px; }
+.question { color: var(--dim); font-size: 12px; }
+.card .row { gap: 4px; }
+.card button { padding: 3px 8px; }
+.foreign { display: flex; align-items: center; gap: 10px; }
+.foreign b { width: 16px; font-weight: 600; }
+.answers { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.answers button { padding: 9px 8px; }
+.foreign label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+.required { color: var(--bad); }
+#doneBar { position: sticky; bottom: -10px; background: var(--panel); padding: 6px 0 10px; }
+#doneHint { color: var(--bad); font-size: 12px; min-height: 16px; margin-bottom: 3px; }
+#plotStem { position: absolute; left: 52px; top: 12px; background: rgba(0,0,0,.72); color: #fff; font-weight: 600; padding: 3px 9px; border-radius: 5px; pointer-events: none; }
+#side { width: 380px; overflow-y: auto; background: var(--panel); border-left: 1px solid var(--line); padding: 10px; display: flex; flex-direction: column; gap: 12px; }
+#side h2 { font-size: 13px; margin: 0 0 5px; color: var(--dim); font-weight: 600; }
+textarea, input[type=text] { width: 100%; font: inherit; color: var(--text); background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 5px 7px; }
+textarea { min-height: 76px; resize: vertical; }
+#done { width: 100%; padding: 8px; background: #2c5238; border-color: var(--ok); }
+#credit { color: var(--dim); font-size: 12px; }
+#credit a { color: var(--accent); }
+#private { background: #5a3d12; color: #ffe0b2; border-radius: 5px; padding: 5px 8px; font-size: 12px; }
+details { color: var(--dim); font-size: 12px; }
+details summary { cursor: pointer; }
+details ul { padding-left: 16px; margin: 6px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title" data-text="pageTitle"></h1>
+  <button id="prev" data-title="prevClip">◀<kbd>[</kbd></button>
+  <span id="position"></span>
+  <button id="next" data-title="nextClip">▶<kbd>]</kbd></button>
+  <span id="progress" style="color:var(--dim)"></span>
+  <span id="status"></span>
+</header>
+<main>
+  <nav id="list"></nav>
+  <section id="center">
+    <div class="row" id="stems"></div>
+    <div id="plot">
+      <canvas id="canvas"></canvas>
+      <div id="plotStem"></div>
+      <div id="loading" data-text="loading"></div>
+    </div>
+    <div class="row">
+      <button id="play" data-html="play"></button>
+      <button id="loop" data-html="loop"></button>
+      <button id="slow">0.5×<kbd>G</kbd></button>
+      <button id="tool"></button>
+      <button id="zoomVoice" data-text="zoomVoice"></button>
+      <button id="zoomAll" data-text="zoomAll"></button>
+      <label class="slider"><span data-text="volume"></span><input id="volume" type="range" min="0" max="1.5" step="0.01" value="0.9"></label>
+      <label class="slider"><span data-text="floor"></span><input id="floor" type="range" min="-85" max="-30" step="1" value="-52"></label>
+      <label class="slider"><span data-text="delay"></span><input id="delay" type="range" min="0" max="800" step="5" value="0"><span id="delayValue"></span></label>
+      <button id="measure" data-text="measure"></button>
+      <span id="readout"></span>
+    </div>
+    <div id="selection"></div>
+  </section>
+  <aside id="side">
+    <div id="private" hidden></div>
+    <div id="intro" data-html="intro"></div>
+    <div class="card">
+      <h3><span data-text="song"></span> <small data-text="required"></small></h3>
+      <div class="question" id="presentAsk" data-text="songAsk"></div>
+      <div class="foreign" id="present"></div>
+    </div>
+    <div id="cards"></div>
+    <div>
+      <h2 data-text="commentTitle"></h2>
+      <textarea id="comment" data-placeholder="commentPlaceholder"></textarea>
+    </div>
+    <div id="doneBar">
+      <div id="doneHint"></div>
+      <button id="done" data-html="done"></button>
+    </div>
+    <div id="credit"></div>
+    <details id="hints" data-html="hints"></details>
+  </aside>
+</main>
+<script>
+const LOG2 = Math.log2;
+const $ = (id) => document.getElementById(id);
+const STEM_KEYS = ["KeyQ", "KeyW", "KeyE", "KeyR", "KeyT", "KeyY", "KeyU"];
+const OLD_CONTENT = { none: ["instrumental"], one: ["lead"], lead_backing: ["lead", "backing"] };
+const BETTER = ["a", "b", "same", "unknown"];
+const STEM_GROUPS = [
+  { id: "lead", foreign: ["backing", "instrumental"] },
+  { id: "backing", foreign: ["lead", "instrumental"] },
+  { id: "instrumental", foreign: ["lead", "backing"] },
+];
+const VOICE_VIEW = [65.41, 4186];
+const PLOT = { left: 44, right: 6, top: 6, bottom: 22 };
+const DELAY_KEY = "stand.outputDelay";
+const TICK_COUNT = 12;
+const TICK_SECONDS = 1;
+const TICK_SKIP = 2;
+const TICK_MIN_PRESSES = 5;
+const TICK_MAX_SPREAD = 0.12;
+const MESSAGES_URL = "/messages.ru.json";
+let messages = null;
+
+function t(key, values = {}) {
+  return messages[key].replace(/\{(\w+)\}/g, (_, name) => values[name]);
+}
+async function loadMessages() {
+  const response = await fetch(MESSAGES_URL);
+  messages = await response.json();
+  STEM_GROUPS.forEach((group) => Object.assign(group, messages.stemGroups[group.id]));
+  document.querySelectorAll("[data-text]").forEach((node) => { node.textContent = messages[node.dataset.text]; });
+  document.querySelectorAll("[data-html]").forEach((node) => { node.innerHTML = messages[node.dataset.html]; });
+  document.querySelectorAll("[data-title]").forEach((node) => { node.title = messages[node.dataset.title]; });
+  document.querySelectorAll("[data-placeholder]").forEach((node) => { node.placeholder = messages[node.dataset.placeholder]; });
+  setTool(state.tool);
+}
+
+function readDelay() {
+  try {
+    const text = localStorage.getItem(DELAY_KEY);
+    if (text === null) return null;
+    const value = Number(text);
+    return Number.isFinite(value) && value >= 0 ? value : null;
+  } catch (error) {
+    return null;
+  }
+}
+function writeDelay(value) {
+  try {
+    localStorage.setItem(DELAY_KEY, String(value));
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+const state = {
+  manifest: null, labels: {}, index: 0, stem: null, tool: "lasso", loop: false, rate: 1,
+  pending: null, selected: null, view: null, floor: -52, position: 0, playing: false,
+  boost: null, undo: [], drag: null, hover: null, dirty: true, delay: readDelay(), measure: null, measureNote: "",
+};
+const audio = { loopRange: [0, 0], ctx: null, master: null, gains: {}, buffers: {}, sources: [], startedAt: 0, startOffset: 0, auditionSource: null, auditionStart: 0, auditionAt: 0, auditionLength: 0, cache: new Map() };
+const images = { grey: {}, width: 0, height: 0, canvases: new Map() };
+
+const canvas = $("canvas");
+const paint = canvas.getContext("2d");
+
+function clip() { return state.manifest.clips[state.index]; }
+function spectrum() { return state.manifest.spectrum; }
+function classOf(id) { return state.manifest.classes.find((c) => c.id === id); }
+function classesList() { return state.manifest.classes; }
+
+function emptyStem() { return { better: null, foreign: { a: [], b: [] }, comment: "" }; }
+function emptyLabel() {
+  return { regions: [], present: null, stems: { lead: emptyStem(), backing: emptyStem(), instrumental: emptyStem() }, comment: "", done: false };
+}
+function presentOf(data) {
+  return data.present || OLD_CONTENT[data.content] || [];
+}
+function asksPresent() {
+  return state.manifest.ask === "present";
+}
+function needsComparison(data) {
+  if (asksPresent()) return false;
+  if (data.content && !data.present) return true;
+  return presentOf(data).length > 1 || Boolean(data.unsure);
+}
+function missingStems(data) {
+  return needsComparison(data) ? STEM_GROUPS.filter((group) => !data.stems[group.id].better) : [];
+}
+function missingPresent(data) {
+  return !presentOf(data).length && !data.unsure;
+}
+function normalizeLabel(data) {
+  if (!data.stems) {
+    const stems = emptyLabel().stems;
+    stems.lead.better = data.better_lead || null;
+    stems.backing.better = data.better_backing || null;
+    data.stems = stems;
+    delete data.better_lead;
+    delete data.better_backing;
+  }
+  if (data.done && (missingStems(data).length || missingPresent(data))) data.done = false;
+  return data;
+}
+function label() {
+  const id = clip().id;
+  if (!state.labels[id]) state.labels[id] = emptyLabel();
+  return state.labels[id];
+}
+
+function ensureAudio() {
+  if (!audio.ctx) {
+    audio.ctx = new AudioContext();
+    audio.master = audio.ctx.createGain();
+    audio.master.gain.value = Number($("volume").value);
+    audio.master.connect(audio.ctx.destination);
+  }
+  if (audio.ctx.state === "suspended") audio.ctx.resume();
+  renderDelay();
+}
+
+function formatTime(seconds) {
+  const whole = Math.floor(seconds / 60);
+  const rest = seconds - whole * 60;
+  return `${whole}:${rest.toFixed(2).padStart(5, "0")}`;
+}
+function noteName(hz) {
+  const names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+  const midi = Math.round(69 + 12 * LOG2(hz / 440));
+  return `${names[(midi % 12 + 12) % 12]}${Math.floor(midi / 12) - 1}`;
+}
+
+function setStatus(text, bad) {
+  $("status").textContent = text;
+  $("status").className = bad ? "bad" : "";
+}
+
+const saveTimers = new Map();
+function touch() {
+  renderList();
+  const id = clip().id;
+  clearTimeout(saveTimers.get(id));
+  setStatus(t("saving"));
+  saveTimers.set(id, setTimeout(() => save(id), 250));
+}
+window.addEventListener("pagehide", () => {
+  saveTimers.forEach((timer, id) => {
+    clearTimeout(timer);
+    navigator.sendBeacon("/api/save", JSON.stringify({ clip: id, data: state.labels[id] }));
+  });
+  saveTimers.clear();
+});
+async function save(id) {
+  saveTimers.delete(id);
+  try {
+    const response = await fetch("/api/save", { method: "POST", body: JSON.stringify({ clip: id, data: state.labels[id] }) });
+    if (!response.ok) throw new Error(await response.text());
+    setStatus(t("saved", { time: new Date().toLocaleTimeString() }));
+  } catch (error) {
+    setStatus(t("notSaved", { error: error.message }), true);
+  }
+}
+function remember() {
+  state.undo.push({ clip: clip().id, data: JSON.stringify(label()) });
+  if (state.undo.length > 100) state.undo.shift();
+}
+function undo() {
+  const entry = state.undo.pop();
+  if (!entry) return;
+  state.labels[entry.clip] = JSON.parse(entry.data);
+  const index = state.manifest.clips.findIndex((c) => c.id === entry.clip);
+  state.selected = null; state.pending = null;
+  if (index !== state.index) loadClip(index); else renderAll();
+  touch();
+}
+
+function renderList() {
+  const list = $("list");
+  const scrolled = list.scrollTop;
+  list.innerHTML = "";
+  let done = 0;
+  state.manifest.clips.forEach((item, i) => {
+    const data = state.labels[item.id];
+    const answered = data && STEM_GROUPS.some((group) => {
+      const stem = data.stems[group.id];
+      return stem.better || stem.comment || stem.foreign.a.length || stem.foreign.b.length;
+    });
+    const touched = data && (data.regions.length || presentOf(data).length || data.unsure || data.comment || answered);
+    if (data && data.done) done += 1;
+    const row = document.createElement("button");
+    row.className = i === state.index ? "current" : "";
+    const dot = document.createElement("span");
+    dot.className = `dot ${data && data.done ? "done" : touched ? "touched" : ""}`;
+    row.append(dot, document.createTextNode(`${i + 1}${item.train === false ? " 🔒" : ""}`));
+    if (data && data.regions.length) {
+      const count = document.createElement("span");
+      count.className = "count";
+      count.textContent = data.regions.length;
+      row.append(count);
+    }
+    row.onclick = () => loadClip(i);
+    list.append(row);
+  });
+  list.scrollTop = scrolled;
+  if (list.children[state.index]) list.children[state.index].scrollIntoView({ block: "nearest" });
+  $("position").textContent = t("clipPosition", { index: state.index + 1, total: state.manifest.clips.length });
+  $("progress").textContent = t("progress", { done });
+}
+
+function renderStems() {
+  const host = $("stems");
+  host.innerHTML = "";
+  const current = state.manifest.stems.find((stem) => stem.id === state.stem);
+  $("plotStem").textContent = current ? current.title : "";
+  state.manifest.stems.forEach((stem, i) => {
+    const button = document.createElement("button");
+    button.className = stem.id === state.stem ? "on" : "";
+    button.innerHTML = `${stem.title}<kbd>${STEM_KEYS[i].slice(3)}</kbd>`;
+    button.onclick = () => setStem(stem.id);
+    host.append(button);
+  });
+}
+
+function togglePresent(id) {
+  remember();
+  const data = label();
+  const ticked = presentOf(data);
+  data.present = ticked.includes(id) ? ticked.filter((v) => v !== id) : [...ticked, id];
+  data.unsure = false;
+  renderForm();
+  touch();
+}
+function toggleUnsure() {
+  remember();
+  const data = label();
+  data.unsure = !data.unsure;
+  if (data.unsure) data.present = [];
+  renderForm();
+  touch();
+}
+function renderAnswers(data) {
+  const host = $("present");
+  host.innerHTML = "";
+  host.className = "answers";
+  STEM_GROUPS.forEach((group, i) => {
+    const button = document.createElement("button");
+    button.dataset.present = group.id;
+    button.className = presentOf(data).includes(group.id) ? "on" : "";
+    button.innerHTML = `${t("hasStem", { stem: group.title.toLowerCase() })}<kbd>${i + 1}</kbd>`;
+    button.onclick = () => togglePresent(group.id);
+    host.append(button);
+  });
+  const unsure = document.createElement("button");
+  unsure.dataset.unsure = "1";
+  unsure.className = data.unsure ? "on" : "";
+  unsure.innerHTML = `${messages.better.unknown}<kbd>${STEM_GROUPS.length + 1}</kbd>`;
+  unsure.onclick = toggleUnsure;
+  host.append(unsure);
+  $("doneHint").textContent = state.showMissing && missingPresent(data) ? t("markOrUnsure") : "";
+}
+function renderPresent(data) {
+  if (asksPresent()) { renderAnswers(data); return; }
+  const host = $("present");
+  host.innerHTML = "";
+  STEM_GROUPS.forEach((group) => {
+    const item = document.createElement("label");
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.dataset.present = group.id;
+    box.checked = presentOf(data).includes(group.id);
+    box.onchange = () => {
+      remember();
+      const ticked = presentOf(data);
+      data.present = box.checked ? [...ticked, group.id] : ticked.filter((v) => v !== group.id);
+      data.unsure = false;
+      host.querySelector("[data-unsure]").checked = false;
+      renderCards(data);
+      renderList();
+      touch();
+    };
+    item.append(box, document.createTextNode(t("hasStem", { stem: group.title.toLowerCase() })));
+    host.append(item);
+  });
+  const item = document.createElement("label");
+  const box = document.createElement("input");
+  box.type = "checkbox";
+  box.dataset.unsure = "1";
+  box.checked = Boolean(data.unsure);
+  box.onchange = () => {
+    remember();
+    data.unsure = box.checked;
+    if (box.checked) data.present = [];
+    renderPresent(data);
+    renderCards(data);
+    renderList();
+    touch();
+  };
+  item.append(box, document.createTextNode(messages.better.unknown));
+  host.append(item);
+}
+
+function stemKey(stemId) {
+  const index = state.manifest.stems.findIndex((stem) => stem.id === stemId);
+  return index >= 0 ? STEM_KEYS[index].slice(3) : "";
+}
+function renderCards(data) {
+  const host = $("cards");
+  host.innerHTML = "";
+  if (asksPresent()) return;
+  if (!needsComparison(data)) {
+    $("doneHint").textContent = missingPresent(data) ? t("markOrUnsure") : t("idealKnown");
+    return;
+  }
+  const missing = missingStems(data);
+  STEM_GROUPS.forEach((group) => {
+    const stem = data.stems[group.id];
+    const card = document.createElement("div");
+    const listening = state.stem && state.stem.startsWith(`${group.id}_`);
+    const flagged = state.showMissing && missing.includes(group);
+    card.className = `card${listening ? " listening" : ""}${flagged ? " missing" : ""}`;
+    card.dataset.stem = group.id;
+
+    const title = document.createElement("h3");
+    title.innerHTML = `${group.title} <small>${group.hint}</small>`;
+    card.append(title);
+
+    const listen = document.createElement("div");
+    listen.className = "row";
+    const listenLabel = document.createElement("span");
+    listenLabel.className = "question";
+    listenLabel.textContent = t("listen");
+    listen.append(listenLabel);
+    ["a", "b"].forEach((side) => {
+      const id = `${group.id}_${side}`;
+      const button = document.createElement("button");
+      button.dataset.listen = side;
+      button.className = state.stem === id ? "on" : "";
+      button.innerHTML = `${group.title} ${side.toUpperCase()}<kbd>${stemKey(id)}</kbd>`;
+      button.onclick = () => setStem(id);
+      listen.append(button);
+    });
+    card.append(listen);
+
+    const ask = document.createElement("div");
+    ask.className = "question";
+    ask.innerHTML = `${t("whichCleaner", { stem: group.title.toLowerCase() })} <span class="required">${t("required")}</span>`;
+    card.append(ask);
+    const choices = document.createElement("div");
+    choices.className = "row";
+    BETTER.forEach((id) => {
+      const button = document.createElement("button");
+      button.dataset.better = id;
+      button.textContent = messages.better[id];
+      button.className = stem.better === id ? "on" : "";
+      button.onclick = () => {
+        remember();
+        stem.better = stem.better === id ? null : id;
+        renderForm();
+        touch();
+      };
+      choices.append(button);
+    });
+    card.append(choices);
+
+    const heard = document.createElement("div");
+    heard.className = "question";
+    heard.textContent = t("heardForeign", { where: group.where });
+    card.append(heard);
+    ["a", "b"].forEach((side) => {
+      const row = document.createElement("div");
+      row.className = "foreign";
+      const name = document.createElement("b");
+      name.textContent = side.toUpperCase();
+      row.append(name);
+      group.foreign.forEach((id) => {
+        const item = document.createElement("label");
+        const box = document.createElement("input");
+        box.type = "checkbox";
+        box.dataset.side = side;
+        box.dataset.foreign = id;
+        box.checked = stem.foreign[side].includes(id);
+        box.onchange = () => {
+          remember();
+          stem.foreign[side] = box.checked ? [...stem.foreign[side], id] : stem.foreign[side].filter((v) => v !== id);
+          renderList();
+          touch();
+        };
+        item.append(box, document.createTextNode(messages.foreignNames[id]));
+        row.append(item);
+      });
+      card.append(row);
+    });
+
+    const note = document.createElement("input");
+    note.type = "text";
+    note.dataset.comment = "1";
+    note.placeholder = t("stemComment", { stem: group.title });
+    note.value = stem.comment || "";
+    note.oninput = () => { stem.comment = note.value; touch(); };
+    card.append(note);
+    host.append(card);
+  });
+  const titles = missing.map((group) => group.title.toLowerCase()).join(", ");
+  $("doneHint").textContent = missing.length ? t("leftToCompare", { stems: titles }) : "";
+}
+
+function renderForm() {
+  const data = label();
+  renderPresent(data);
+  renderCards(data);
+  if (document.activeElement !== $("comment")) $("comment").value = data.comment || "";
+  const item = clip();
+  const credit = item.credit || {};
+  const privateNote = $("private");
+  privateNote.hidden = item.train !== false;
+  privateNote.textContent = item.note || "";
+  const license = credit.license_url ? `<a href="${credit.license_url}" target="_blank" rel="noreferrer">${credit.license}</a>` : (credit.license || "");
+  const page = credit.page ? ` · <a href="${credit.page}" target="_blank" rel="noreferrer">${t("creditPage")}</a>` : "";
+  $("credit").innerHTML = credit.artist && !asksPresent() ? `${credit.artist} — ${credit.title}<br>${license}${page}` : "";
+}
+
+function bounds(polygon) {
+  const ts = polygon.map((p) => p[0]);
+  const fs = polygon.map((p) => p[1]);
+  return { t0: Math.min(...ts), t1: Math.max(...ts), f0: Math.min(...fs), f1: Math.max(...fs) };
+}
+
+function activeRegion() {
+  if (state.pending) return state.pending;
+  if (state.selected !== null) return label().regions[state.selected];
+  return null;
+}
+
+function renderSelection() {
+  const host = $("selection");
+  const region = activeRegion();
+  host.innerHTML = "";
+  if (state.measure) {
+    const left = Math.max(0, TICK_COUNT + TICK_SKIP - state.measure.presses.length);
+    host.innerHTML = t("measuring", { left });
+    return;
+  }
+  if (!region && asksPresent()) {
+    const note = state.measureNote ? ` ${state.measureNote}` : "";
+    host.innerHTML = `<span class="hint">${t("ticksHint")}${note}</span>`;
+    return;
+  }
+  if (!region) {
+    const first = state.delay === null ? t("measureFirst") : "";
+    const last = state.measureNote ? ` ${state.measureNote}` : "";
+    host.innerHTML = `<span class="hint">${first}${t("outlineHint")}${last}</span>`;
+    return;
+  }
+  const b = bounds(region.polygon);
+  const start = clip().start_s || 0;
+  const top = document.createElement("div");
+  top.className = "row";
+  const only = document.createElement("button");
+  only.innerHTML = t("auditionOnly");
+  only.onclick = () => audition("only");
+  const without = document.createElement("button");
+  without.innerHTML = t("auditionWithout");
+  without.onclick = () => audition("without");
+  const info = document.createElement("span");
+  info.id = "selinfo";
+  const boost = state.boost !== null ? t("boosted", { db: state.boost.toFixed(0) }) : "";
+  const stemTitle = (state.manifest.stems.find((stem) => stem.id === region.stem) || {}).title || "";
+  info.textContent = `${t("outlined", { stem: stemTitle, from: formatTime(start + b.t0), to: formatTime(start + b.t1), low: Math.round(b.f0), high: Math.round(b.f1), lowNote: noteName(b.f0), highNote: noteName(b.f1) })}${boost}`;
+  top.append(only, without, info);
+  const heard = document.createElement("label");
+  heard.className = "slider";
+  const check = document.createElement("input");
+  check.type = "checkbox";
+  check.checked = region.seen_only === true;
+  check.onchange = () => { if (state.pending) { state.pending.seen_only = check.checked; return; } remember(); region.seen_only = check.checked; touch(); };
+  heard.append(check, document.createTextNode(t("seenOnly")));
+  top.append(heard);
+  if (state.pending) {
+    const cancel = document.createElement("button");
+    cancel.innerHTML = t("cancel");
+    cancel.onclick = () => { state.pending = null; state.boost = null; renderAll(); };
+    top.append(cancel);
+  } else {
+    const remove = document.createElement("button");
+    remove.innerHTML = t("remove");
+    remove.onclick = removeSelected;
+    top.append(remove);
+  }
+  const classes = document.createElement("div");
+  classes.className = "row";
+  classes.style.marginTop = "6px";
+  const question = document.createElement("span");
+  question.className = "question";
+  question.textContent = t("whatSound");
+  classes.append(question);
+  classesList().forEach((item, i) => {
+    const button = document.createElement("button");
+    button.className = `cls ${region.cls === item.id ? "on" : ""}`;
+    button.title = item.hint;
+    button.innerHTML = `<span class="swatch" style="background:${item.color}"></span>${item.title}<kbd>${i + 1}</kbd>`;
+    button.onclick = () => assignClass(item.id);
+    classes.append(button);
+  });
+  host.append(top, classes);
+  if (!state.pending) {
+    const note = document.createElement("input");
+    note.type = "text";
+    note.placeholder = t("regionComment");
+    note.value = region.comment || "";
+    note.style.marginTop = "6px";
+    note.oninput = () => { region.comment = note.value; touch(); };
+    host.append(note);
+  }
+}
+
+function renderAll() {
+  renderList(); renderStems(); renderForm(); renderSelection();
+  state.dirty = true;
+}
+
+function assignClass(id) {
+  if (state.pending) {
+    remember();
+    const region = { ...state.pending, cls: id, stem: state.pending.stem };
+    label().regions.push(region);
+    state.selected = label().regions.length - 1;
+    state.pending = null;
+  } else if (state.selected !== null) {
+    remember();
+    label().regions[state.selected].cls = id;
+  } else return;
+  renderSelection();
+  state.dirty = true;
+  touch();
+}
+
+function removeSelected() {
+  if (state.selected === null) return;
+  remember();
+  label().regions.splice(state.selected, 1);
+  state.selected = null;
+  state.boost = null;
+  renderAll();
+  touch();
+}
+
+function stopSource(source) {
+  try {
+    source.stop();
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+function stopSources() {
+  audio.sources.forEach(stopSource);
+  audio.sources = [];
+}
+function stopAudition() {
+  if (audio.auditionSource) {
+    stopSource(audio.auditionSource);
+    audio.auditionSource = null;
+  }
+}
+function loopRange() {
+  const region = activeRegion();
+  const duration = state.manifest.duration;
+  if (!region) return [0, duration];
+  const b = bounds(region.polygon);
+  return [Math.max(0, b.t0 - 0.25), Math.min(duration, b.t1 + 0.25)];
+}
+function play(offset) {
+  ensureAudio();
+  stopSources();
+  stopAudition();
+  const duration = state.manifest.duration;
+  let from = offset >= duration - 0.02 ? 0 : offset;
+  const when = audio.ctx.currentTime + 0.03;
+  const [loopStart, loopEnd] = state.loop ? loopRange() : [0, duration];
+  audio.loopRange = [loopStart, loopEnd];
+  if (state.loop && (from < loopStart || from >= loopEnd)) from = loopStart;
+  state.manifest.stems.forEach((stem) => {
+    const source = audio.ctx.createBufferSource();
+    source.buffer = audio.buffers[stem.id];
+    source.playbackRate.value = state.rate;
+    if (state.loop) { source.loop = true; source.loopStart = loopStart; source.loopEnd = loopEnd; }
+    source.connect(audio.gains[stem.id]);
+    source.start(when, from);
+    audio.sources.push(source);
+  });
+  audio.startedAt = when;
+  audio.startOffset = from;
+  state.playing = true;
+  $("play").innerHTML = t("pause");
+}
+function pause() {
+  state.position = currentPosition();
+  stopSources();
+  stopAudition();
+  state.playing = false;
+  $("play").innerHTML = t("play");
+}
+function reportedDelay() {
+  if (!audio.ctx) return 0;
+  return (audio.ctx.baseLatency || 0) + (audio.ctx.outputLatency || 0);
+}
+function outputDelay() {
+  return state.delay === null ? reportedDelay() : state.delay;
+}
+function renderDelay() {
+  const value = outputDelay();
+  $("delay").value = String(Math.round(value * 1000));
+  $("delayValue").textContent = `${t("delayValue", { ms: Math.round(value * 1000) })}${state.delay === null ? t("delayByBrowser") : ""}`;
+}
+function setDelay(value) {
+  state.delay = value;
+  writeDelay(value);
+  renderDelay();
+  state.dirty = true;
+}
+function currentPosition() {
+  if (audio.auditionSource) {
+    const passed = Math.max(0, audio.ctx.currentTime - audio.auditionAt - outputDelay());
+    return audio.auditionStart + Math.min(passed, audio.auditionLength);
+  }
+  if (!state.playing || !audio.ctx) return state.position;
+  let at = audio.startOffset + Math.max(0, audio.ctx.currentTime - audio.startedAt - outputDelay()) * state.rate;
+  if (state.loop) {
+    const [a, b] = audio.loopRange;
+    if (at >= b) at = a + ((at - a) % (b - a));
+  }
+  return at;
+}
+function setStem(id) {
+  state.stem = id;
+  if (audio.ctx) {
+    state.manifest.stems.forEach((stem) => {
+      if (audio.gains[stem.id]) audio.gains[stem.id].gain.setTargetAtTime(stem.id === id ? 1 : 0, audio.ctx.currentTime, 0.005);
+    });
+  }
+  renderStems();
+  renderForm();
+  state.dirty = true;
+}
+
+async function audition(mode) {
+  const region = activeRegion();
+  if (!region) return;
+  ensureAudio();
+  const stem = state.stem;
+  const key = JSON.stringify([clip().id, stem, mode, region.polygon]);
+  let entry = audio.cache.get(key);
+  if (!entry) {
+    setStatus(t("preparingSound"));
+    const response = await fetch("/api/audition", { method: "POST", body: JSON.stringify({ clip: clip().id, stem, mode, polygon: region.polygon }) });
+    if (!response.ok) { setStatus(t("soundError", { error: await response.text() }), true); return; }
+    const buffer = await audio.ctx.decodeAudioData(await response.arrayBuffer());
+    entry = { buffer, boost: Number(response.headers.get("X-Boost-Db")), start: Number(response.headers.get("X-Start-S")) };
+    audio.cache.set(key, entry);
+    setStatus("");
+  }
+  pause();
+  const source = audio.ctx.createBufferSource();
+  source.buffer = entry.buffer;
+  source.connect(audio.master);
+  source.onended = () => {
+    setTimeout(() => {
+      if (audio.auditionSource === source) { audio.auditionSource = null; state.dirty = true; }
+    }, outputDelay() * 1000);
+  };
+  source.start();
+  audio.auditionSource = source;
+  audio.auditionAt = audio.ctx.currentTime;
+  audio.auditionStart = entry.start;
+  audio.auditionLength = entry.buffer.duration;
+  state.position = entry.start;
+  state.boost = mode === "only" ? entry.boost : null;
+  renderSelection();
+}
+
+async function loadGrey(url) {
+  const image = new Image();
+  image.src = url;
+  await image.decode();
+  const scratch = document.createElement("canvas");
+  scratch.width = image.naturalWidth;
+  scratch.height = image.naturalHeight;
+  const context = scratch.getContext("2d", { willReadFrequently: true });
+  context.drawImage(image, 0, 0);
+  const rgba = context.getImageData(0, 0, scratch.width, scratch.height).data;
+  const grey = new Uint8Array(scratch.width * scratch.height);
+  for (let i = 0; i < grey.length; i += 1) grey[i] = rgba[i * 4];
+  images.width = scratch.width;
+  images.height = scratch.height;
+  return grey;
+}
+
+function stemCanvas(stem) {
+  const key = `${stem}:${state.floor}`;
+  let result = images.canvases.get(key);
+  if (result) return result;
+  const low = spectrum().db_floor;
+  const span = -low;
+  const lut = new Uint8Array(256);
+  for (let v = 0; v < 256; v += 1) {
+    const db = low + (v / 255) * span;
+    const t = Math.min(1, Math.max(0, (db - state.floor) / -state.floor));
+    lut[v] = Math.round(255 * t ** 1.1);
+  }
+  result = document.createElement("canvas");
+  result.width = images.width;
+  result.height = images.height;
+  const context = result.getContext("2d");
+  const output = context.createImageData(images.width, images.height);
+  const grey = images.grey[stem];
+  for (let i = 0; i < grey.length; i += 1) {
+    const value = lut[grey[i]];
+    output.data[i * 4] = value; output.data[i * 4 + 1] = value; output.data[i * 4 + 2] = value; output.data[i * 4 + 3] = 255;
+  }
+  context.putImageData(output, 0, 0);
+  images.canvases.set(key, result);
+  return result;
+}
+
+async function loadClip(index, autoplay = false) {
+  pause();
+  state.index = index;
+  if (asksPresent()) state.stem = state.manifest.default_stem;
+  state.pending = null; state.selected = null; state.boost = null; state.position = 0; state.showMissing = false;
+  $("loading").hidden = false;
+  renderAll();
+  const item = clip();
+  const stems = state.manifest.stems;
+  const decoded = await Promise.all(stems.map(async (stem) => {
+    const response = await fetch(`/clips/${item.id}/${stem.id}.wav`);
+    return decodeContext().decodeAudioData(await response.arrayBuffer());
+  }));
+  const greys = await Promise.all(stems.map((stem) => loadGrey(`/clips/${item.id}/${stem.id}.png`)));
+  if (state.index !== index) return;
+  images.canvases.clear();
+  stems.forEach((stem, i) => {
+    audio.buffers[stem.id] = decoded[i];
+    images.grey[stem.id] = greys[i];
+  });
+  audio.cache.clear();
+  $("loading").hidden = true;
+  if (audio.ctx) connectGains();
+  state.dirty = true;
+  window.standReady = item.id;
+  if (autoplay && audio.ctx) togglePlay();
+}
+let silentContext = null;
+function decodeContext() { return audio.ctx || (silentContext = silentContext || new OfflineAudioContext(2, 44100, 44100)); }
+function connectGains() {
+  state.manifest.stems.forEach((stem) => {
+    if (!audio.gains[stem.id]) {
+      const gain = audio.ctx.createGain();
+      gain.connect(audio.master);
+      audio.gains[stem.id] = gain;
+    }
+    audio.gains[stem.id].gain.value = stem.id === state.stem ? 1 : 0;
+  });
+}
+
+function plotArea() {
+  const w = canvas.clientWidth; const h = canvas.clientHeight;
+  return { x: PLOT.left, y: PLOT.top, w: w - PLOT.left - PLOT.right, h: h - PLOT.top - PLOT.bottom };
+}
+function toX(t) { const a = plotArea(); return a.x + ((t - state.view.t0) / (state.view.t1 - state.view.t0)) * a.w; }
+function toY(f) { const a = plotArea(); return a.y + (1 - (LOG2(f) - state.view.l0) / (state.view.l1 - state.view.l0)) * a.h; }
+function fromX(x) { const a = plotArea(); return state.view.t0 + ((x - a.x) / a.w) * (state.view.t1 - state.view.t0); }
+function fromY(y) { const a = plotArea(); return 2 ** (state.view.l0 + (1 - (y - a.y) / a.h) * (state.view.l1 - state.view.l0)); }
+
+function resetView(range) {
+  const s = spectrum();
+  const [low, high] = range || VOICE_VIEW;
+  state.view = {
+    t0: 0, t1: state.manifest.duration,
+    l0: Math.max(LOG2(low), LOG2(s.fmin)), l1: Math.min(LOG2(high), LOG2(s.fmin) + s.octaves),
+  };
+  state.dirty = true;
+}
+
+function polygonPath(polygon) {
+  const path = new Path2D();
+  polygon.forEach(([t, f], i) => {
+    if (i === 0) path.moveTo(toX(t), toY(f)); else path.lineTo(toX(t), toY(f));
+  });
+  path.closePath();
+  return path;
+}
+
+function draw() {
+  const ratio = window.devicePixelRatio || 1;
+  const width = Math.round(canvas.clientWidth * ratio);
+  const height = Math.round(canvas.clientHeight * ratio);
+  if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
+  paint.setTransform(ratio, 0, 0, ratio, 0, 0);
+  paint.fillStyle = "#000";
+  paint.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+  if (!state.view || !images.grey[state.stem]) return;
+  const area = plotArea();
+  const s = spectrum();
+  const source = stemCanvas(state.stem);
+  const duration = state.manifest.duration;
+  const lmin = LOG2(s.fmin); const lmax = lmin + s.octaves;
+  const sx = (state.view.t0 / duration) * images.width;
+  const sw = ((state.view.t1 - state.view.t0) / duration) * images.width;
+  const sy = ((lmax - state.view.l1) / (lmax - lmin)) * images.height;
+  const sh = ((state.view.l1 - state.view.l0) / (lmax - lmin)) * images.height;
+  paint.imageSmoothingEnabled = true;
+  paint.save();
+  paint.beginPath(); paint.rect(area.x, area.y, area.w, area.h); paint.clip();
+  paint.drawImage(source, sx, sy, sw, sh, area.x, area.y, area.w, area.h);
+  paint.strokeStyle = "rgba(255,255,255,.14)";
+  paint.lineWidth = 1;
+  for (let octave = 0; octave <= 10; octave += 1) {
+    const f = 16.3516 * 2 ** octave;
+    if (LOG2(f) < state.view.l0 || LOG2(f) > state.view.l1) continue;
+    const y = Math.round(toY(f)) + 0.5;
+    paint.beginPath(); paint.moveTo(area.x, y); paint.lineTo(area.x + area.w, y); paint.stroke();
+  }
+  label().regions.forEach((region, i) => {
+    const item = classOf(region.cls) || { color: "#fff" };
+    const path = polygonPath(region.polygon);
+    paint.fillStyle = `${item.color}${i === state.selected ? "40" : "1f"}`;
+    paint.fill(path);
+    paint.strokeStyle = item.color;
+    paint.lineWidth = i === state.selected ? 2.5 : 1.5;
+    paint.stroke(path);
+    const b = bounds(region.polygon);
+    paint.fillStyle = item.color;
+    paint.font = "12px system-ui";
+    paint.fillText(item.title, toX(b.t0) + 2, toY(b.f1) - 3);
+  });
+  const drawn = state.pending ? state.pending.polygon : state.drag && state.drag.moved && !asksPresent() ? dragPolygon(state.drag) : null;
+  if (drawn) {
+    const path = polygonPath(drawn);
+    paint.setLineDash([5, 4]);
+    paint.strokeStyle = "#fff";
+    paint.lineWidth = 1.5;
+    paint.stroke(path);
+    paint.setLineDash([]);
+    paint.fillStyle = "rgba(255,255,255,.08)";
+    paint.fill(path);
+  }
+  const at = currentPosition();
+  if (at >= state.view.t0 && at <= state.view.t1) {
+    const x = toX(at);
+    paint.strokeStyle = audio.auditionSource ? "#ffb74d" : "#90caf9";
+    paint.lineWidth = 1.5;
+    paint.beginPath(); paint.moveTo(x, area.y); paint.lineTo(x, area.y + area.h); paint.stroke();
+  }
+  paint.restore();
+  paint.font = "12px system-ui";
+  paint.textBaseline = "middle";
+  for (let octave = 0; octave <= 10; octave += 1) {
+    const f = 16.3516 * 2 ** octave;
+    if (LOG2(f) < state.view.l0 || LOG2(f) > state.view.l1) continue;
+    paint.fillStyle = "#ccc";
+    paint.fillText(`C${octave}`, 8, toY(f));
+  }
+  paint.textBaseline = "alphabetic";
+  const start = clip().start_s || 0;
+  const span = state.view.t1 - state.view.t0;
+  const step = span > 4 ? 1 : span > 1.5 ? 0.25 : 0.1;
+  const first = Math.ceil((start + state.view.t0) / step) * step;
+  for (let t = first; t <= start + state.view.t1 + 1e-6; t += step) {
+    const x = toX(t - start);
+    paint.fillStyle = "#ccc";
+    paint.fillRect(x, area.y + area.h, 1, 4);
+    if (x < area.x + area.w - 34) paint.fillText(step >= 1 ? formatTime(t).slice(0, -3) : formatTime(t), x + 3, area.y + area.h + 15);
+  }
+}
+
+function frame() {
+  if (state.playing && !state.loop && currentPosition() >= state.manifest.duration) {
+    state.position = 0;
+    stopSources();
+    state.playing = false;
+    $("play").innerHTML = t("play");
+    state.dirty = true;
+  }
+  if (state.playing || audio.auditionSource || state.dirty) { draw(); state.dirty = false; }
+  requestAnimationFrame(frame);
+}
+
+function dragPolygon(d) {
+  if (d.tool === "box") {
+    const [a, b] = [d.points[0], d.points[d.points.length - 1]];
+    return [[a[0], a[1]], [b[0], a[1]], [b[0], b[1]], [a[0], b[1]]];
+  }
+  return d.points;
+}
+function clampPoint(event) {
+  const rect = canvas.getBoundingClientRect();
+  const a = plotArea();
+  const x = Math.min(a.x + a.w, Math.max(a.x, event.clientX - rect.left));
+  const y = Math.min(a.y + a.h, Math.max(a.y, event.clientY - rect.top));
+  return { x, y };
+}
+canvas.addEventListener("pointerdown", (event) => {
+  if (event.button !== 0 || !state.view) return;
+  canvas.setPointerCapture(event.pointerId);
+  const p = clampPoint(event);
+  state.drag = { tool: state.tool, start: p, last: p, moved: false, points: [[fromX(p.x), fromY(p.y)]] };
+});
+canvas.addEventListener("pointermove", (event) => {
+  if (!state.view) return;
+  const p = clampPoint(event);
+  const start = clip().start_s || 0;
+  const f = fromY(p.y);
+  $("readout").textContent = t("readout", { time: formatTime(start + fromX(p.x)), hertz: Math.round(f), note: noteName(f) });
+  const d = state.drag;
+  if (!d) return;
+  if (Math.hypot(p.x - d.start.x, p.y - d.start.y) > 5) d.moved = true;
+  if (Math.hypot(p.x - d.last.x, p.y - d.last.y) >= 3) {
+    d.points.push([fromX(p.x), fromY(p.y)]);
+    d.last = p;
+    state.dirty = true;
+  }
+});
+function roundPolygon(polygon) {
+  return polygon.map(([t, f]) => [Math.round(t * 1000) / 1000, Math.round(f * 10) / 10]);
+}
+canvas.addEventListener("pointerup", (event) => {
+  const d = state.drag;
+  state.drag = null;
+  if (!d) return;
+  const p = clampPoint(event);
+  if (d.moved && !asksPresent()) {
+    d.points.push([fromX(p.x), fromY(p.y)]);
+    const polygon = roundPolygon(dragPolygon(d));
+    if (polygon.length >= 3) {
+      state.pending = { polygon, stem: state.stem, cls: null, seen_only: false, comment: "" };
+      state.selected = null;
+      state.boost = null;
+      renderSelection();
+    }
+    state.dirty = true;
+    return;
+  }
+  const hit = label().regions.findIndex((region) => paint.isPointInPath(polygonPath(region.polygon), p.x * (window.devicePixelRatio || 1), p.y * (window.devicePixelRatio || 1)));
+  if (hit >= 0) {
+    state.selected = hit;
+    state.pending = null;
+    state.boost = null;
+    renderSelection();
+    state.dirty = true;
+    return;
+  }
+  if (state.selected !== null || state.pending) {
+    state.selected = null;
+    state.pending = null;
+    state.boost = null;
+    renderSelection();
+  }
+  const at = Math.min(state.manifest.duration, Math.max(0, fromX(p.x)));
+  if (state.playing) play(at); else { state.position = at; stopAudition(); }
+  state.dirty = true;
+});
+canvas.addEventListener("dblclick", () => resetView());
+canvas.addEventListener("wheel", (event) => {
+  if (!state.view) return;
+  event.preventDefault();
+  const p = clampPoint(event);
+  const factor = event.deltaY > 0 ? 1.2 : 1 / 1.2;
+  if (event.shiftKey) {
+    const s = spectrum();
+    const lmin = LOG2(s.fmin); const lmax = lmin + s.octaves;
+    const anchor = LOG2(fromY(p.y));
+    state.view.l0 = Math.max(lmin, anchor - (anchor - state.view.l0) * factor);
+    state.view.l1 = Math.min(lmax, anchor + (state.view.l1 - anchor) * factor);
+  } else {
+    const anchor = fromX(p.x);
+    state.view.t0 = Math.max(0, anchor - (anchor - state.view.t0) * factor);
+    state.view.t1 = Math.min(state.manifest.duration, anchor + (state.view.t1 - anchor) * factor);
+  }
+  state.dirty = true;
+}, { passive: false });
+new ResizeObserver(() => { state.dirty = true; }).observe($("plot"));
+
+function clickBuffer() {
+  const rate = audio.ctx.sampleRate;
+  const buffer = audio.ctx.createBuffer(1, Math.round(0.012 * rate), rate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < data.length; i += 1) {
+    const t = i / rate;
+    data[i] = Math.sin(2 * Math.PI * 1800 * t) * Math.exp(-t * 500) * 0.9;
+  }
+  return buffer;
+}
+function startMeasure() {
+  ensureAudio();
+  pause();
+  const buffer = clickBuffer();
+  const first = audio.ctx.currentTime + 0.6;
+  const sources = [];
+  for (let i = 0; i < TICK_COUNT + TICK_SKIP; i += 1) {
+    const source = audio.ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(audio.master);
+    source.start(first + i * TICK_SECONDS);
+    sources.push(source);
+  }
+  state.measureNote = "";
+  state.measure = {
+    first, presses: [], sources,
+    timer: setTimeout(finishMeasure, ((TICK_COUNT + TICK_SKIP) * TICK_SECONDS + 1.8) * 1000),
+  };
+  state.pending = null; state.selected = null;
+  renderSelection();
+}
+function cancelMeasure() {
+  const run = state.measure;
+  if (!run) return;
+  clearTimeout(run.timer);
+  run.sources.forEach(stopSource);
+  state.measure = null;
+}
+function pressMeasure(event) {
+  const run = state.measure;
+  const age = Math.max(0, (performance.now() - event.timeStamp) / 1000);
+  run.presses.push(audio.ctx.currentTime - age);
+  if (run.presses.length >= TICK_COUNT + TICK_SKIP) finishMeasure(); else renderSelection();
+}
+function median(values) {
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)];
+}
+function finishMeasure() {
+  const run = state.measure;
+  if (!run) return;
+  cancelMeasure();
+  const phases = run.presses.slice(TICK_SKIP).map((press) => {
+    const phase = ((press - run.first) % TICK_SECONDS + TICK_SECONDS) % TICK_SECONDS;
+    return phase > 0.9 * TICK_SECONDS ? phase - TICK_SECONDS : phase;
+  });
+  if (phases.length < TICK_MIN_PRESSES) {
+    state.measureNote = t("tooFewPresses");
+  } else {
+    const middle = median(phases);
+    const spread = median(phases.map((p) => Math.abs(p - middle)));
+    if (spread > TICK_MAX_SPREAD) {
+      state.measureNote = t("unevenPresses", { spread: Math.round(spread * 1000) });
+    } else {
+      setDelay(Math.max(0, middle));
+      state.measureNote = t("measuredDelay", { delay: Math.round(outputDelay() * 1000), spread: Math.round(spread * 1000) });
+    }
+  }
+  renderSelection();
+}
+
+function togglePlay() {
+  ensureAudio();
+  connectGains();
+  if (state.playing || audio.auditionSource) pause(); else play(state.position);
+}
+function nextClip(direction) {
+  const count = state.manifest.clips.length;
+  const target = state.index + direction;
+  if (target >= 0 && target < count) loadClip(target);
+}
+function finishClip() {
+  if (missingPresent(label())) {
+    state.showMissing = true;
+    renderForm();
+    setStatus(t("markOrUnsure"), true);
+    return;
+  }
+  const missing = missingStems(label());
+  if (missing.length) {
+    state.showMissing = true;
+    renderForm();
+    setStatus(t("leftToCompare", { stems: missing.map((group) => group.title.toLowerCase()).join(", ") }), true);
+    const card = document.querySelector(`.card[data-stem="${missing[0].id}"]`);
+    if (card) card.scrollIntoView({ block: "center" });
+    return;
+  }
+  remember();
+  label().done = true;
+  touch();
+  const clips = state.manifest.clips;
+  for (let step = 1; step <= clips.length; step += 1) {
+    const i = (state.index + step) % clips.length;
+    const data = state.labels[clips[i].id];
+    if (!data || !data.done) { loadClip(i, asksPresent()); return; }
+  }
+  setStatus(t("allDone"));
+  renderAll();
+}
+function restartIfPlaying() {
+  if (state.playing) play(currentPosition());
+}
+
+$("play").onclick = togglePlay;
+$("loop").onclick = () => { state.loop = !state.loop; $("loop").className = state.loop ? "on" : ""; restartIfPlaying(); };
+$("slow").onclick = () => { state.rate = state.rate === 1 ? 0.5 : 1; $("slow").className = state.rate !== 1 ? "on" : ""; restartIfPlaying(); };
+function setTool(tool) {
+  state.tool = tool;
+  $("tool").innerHTML = `${t(tool === "box" ? "toolBox" : "toolLasso")}<kbd>F</kbd>`;
+}
+$("tool").onclick = () => setTool(state.tool === "box" ? "lasso" : "box");
+$("zoomVoice").onclick = () => resetView();
+$("zoomAll").onclick = () => resetView([spectrum().fmin, spectrum().fmin * 2 ** spectrum().octaves]);
+$("volume").oninput = () => { if (audio.master) audio.master.gain.value = Number($("volume").value); };
+$("floor").oninput = () => { state.floor = Number($("floor").value); images.canvases.clear(); state.dirty = true; };
+$("delay").oninput = () => setDelay(Number($("delay").value) / 1000);
+$("measure").onclick = () => { $("measure").blur(); startMeasure(); };
+$("prev").onclick = () => nextClip(-1);
+$("next").onclick = () => nextClip(1);
+$("done").onclick = finishClip;
+$("comment").oninput = () => { label().comment = $("comment").value; touch(); };
+
+window.addEventListener("keydown", (event) => {
+  if (state.measure) {
+    event.preventDefault();
+    if (event.code === "Escape") { cancelMeasure(); renderSelection(); }
+    if (event.code === "Space" && !event.repeat) pressMeasure(event);
+    return;
+  }
+  const field = document.activeElement;
+  const typing = field && (field.tagName === "TEXTAREA" || field.tagName === "INPUT") && field.type !== "range" && field.type !== "checkbox";
+  if (event.ctrlKey && event.code === "KeyZ" && !typing) { event.preventDefault(); undo(); return; }
+  if (typing) {
+    if (event.code === "Escape") field.blur();
+    return;
+  }
+  if (event.ctrlKey || event.metaKey || event.altKey) return;
+  const stemIndex = STEM_KEYS.indexOf(event.code);
+  if (stemIndex >= 0 && state.manifest.stems[stemIndex]) { setStem(state.manifest.stems[stemIndex].id); return; }
+  if (event.code.startsWith("Digit") && asksPresent()) {
+    const digit = Number(event.code.slice(5));
+    if (digit === STEM_GROUPS.length + 1) toggleUnsure();
+    else if (STEM_GROUPS[digit - 1]) togglePresent(STEM_GROUPS[digit - 1].id);
+    return;
+  }
+  if (event.code.startsWith("Digit")) {
+    const item = classesList()[Number(event.code.slice(5)) - 1];
+    if (item && activeRegion()) assignClass(item.id);
+    return;
+  }
+  switch (event.code) {
+    case "Space": event.preventDefault(); if (field && field.blur) field.blur(); togglePlay(); break;
+    case "KeyS": if (!asksPresent()) audition("only"); break;
+    case "KeyD": if (!asksPresent()) audition("without"); break;
+    case "KeyL": $("loop").click(); break;
+    case "KeyG": $("slow").click(); break;
+    case "KeyF": if (!asksPresent()) $("tool").click(); break;
+    case "Escape": state.pending = null; state.selected = null; state.boost = null; renderSelection(); state.dirty = true; break;
+    case "Delete": case "Backspace": removeSelected(); break;
+    case "Enter": event.preventDefault(); if (field && field.blur) field.blur(); finishClip(); break;
+    case "BracketLeft": nextClip(-1); break;
+    case "BracketRight": nextClip(1); break;
+    case "ArrowLeft": case "ArrowRight": {
+      event.preventDefault();
+      const at = Math.max(0, Math.min(state.manifest.duration, currentPosition() + (event.code === "ArrowLeft" ? -0.5 : 0.5)));
+      if (state.playing) play(at); else state.position = at;
+      state.dirty = true;
+      break;
+    }
+    default: break;
+  }
+});
+window.addEventListener("pointerdown", () => { if (audio.ctx) return; ensureAudio(); connectGains(); }, { once: true });
+
+async function start() {
+  await loadMessages();
+  const response = await fetch("/api/round");
+  const payload = await response.json();
+  state.manifest = payload.manifest;
+  state.labels = payload.labels || {};
+  Object.values(state.labels).forEach(normalizeLabel);
+  state.stem = state.manifest.default_stem || state.manifest.stems[1].id;
+  $("title").textContent = t("roundTitle", { round: state.manifest.round });
+  if (asksPresent()) {
+    state.loop = true;
+    $("loop").className = "on";
+    $("tool").hidden = true;
+    $("intro").innerHTML = t("introTicks");
+    $("presentAsk").innerHTML = t("songAskTicks");
+    $("hints").innerHTML = t("hintsTicks");
+  }
+  resetView();
+  renderDelay();
+  const first = state.manifest.clips.findIndex((c) => !(state.labels[c.id] && state.labels[c.id].done));
+  await loadClip(first >= 0 ? first : 0);
+  requestAnimationFrame(frame);
+}
+start().catch((error) => setStatus(messages ? t("loadFailed", { error: error.message }) : error.message, true));
+</script>
+</body>
+</html>

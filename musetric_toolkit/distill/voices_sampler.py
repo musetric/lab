@@ -40,7 +40,13 @@ def rms(a: np.ndarray) -> float:
 
 
 class VoicesSampler:
-    def __init__(self, labels: Path, seed: int, options: VoicesOptions):
+    def __init__(
+        self,
+        labels: Path,
+        seed: int,
+        options: VoicesOptions,
+        withheld: frozenset[str],
+    ):
         self.rng = np.random.default_rng(seed)
         self.options = options
         self.scales = dict(
@@ -50,7 +56,9 @@ class VoicesSampler:
         train = [
             t
             for t in index
-            if t["role"] == "train" and t["seconds"] * 44100 > CHUNK + 44100
+            if t["role"] == "train"
+            and t["seconds"] * 44100 > CHUNK + 44100
+            and t["id"] not in withheld
         ]
         self.songs = [t for t in train if not t["pell"]]
         self.voiced = [t for t in self.songs if t["vocal_share"] >= VOICED_SHARE]

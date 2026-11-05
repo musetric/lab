@@ -15,6 +15,7 @@ and the evaluation on MUSDB18-HQ. The flags of a subcommand are in its `--help`.
 - Training uses openly licensed audio only, and the released student lists it (`release-credits`); MUSDB18-HQ is for evaluation only.
 - A listener's verdicts and hand-made decisions are input files of `data-curate`, never code.
 - `release-convert` keeps writing the published weights byte for byte from the training checkpoint of `long-gate`.
+- `--excluded` names the CSV of the tracks a listener took out of the data for good, kept as an artifact of musetric/musetric#1203 and never in the repository (`gh issue artifact download 1203 1 -R musetric/musetric --output excluded.csv`). `train-voices`, `train-verdicts` and `verdicts` refuse to run without it, and `data-curate` writes the tracks to `dataset.csv` as trash for the commands that read it. A track leaves the list only by a decision of the owner.
 
 ## Commands
 
@@ -26,7 +27,7 @@ musetric-distill data-fma-fetch --meta fma_metadata --corpus open --dataset data
 musetric-distill data-ccmixter --corpus open --listing ccmixter --exclude-artists held-out-artists.txt
 musetric-distill label --teacher teacher --corpus open --labels labels
 musetric-distill data-analyze --labels labels --out analysis
-musetric-distill data-curate --corpus open --labels labels --analysis analysis --meta fma_metadata --dataset dataset.csv --verdicts verdicts --decisions decisions.csv
+musetric-distill data-curate --corpus open --labels labels --analysis analysis --meta fma_metadata --dataset dataset.csv --verdicts verdicts --decisions decisions.csv --excluded excluded.csv
 musetric-distill data-variant --dataset dataset.csv --added added.txt --out variants
 musetric-distill fit-ffn-importance --teacher teacher --labels labels --dataset variants/dataset-fma.csv --out ffn-importance.json
 musetric-distill fit-ffn-refit --teacher teacher --labels labels --dataset variants/dataset-fma.csv --keep 50 --pairs 01 --ranking ffn-importance.json --out ffn-refit-50.pt
@@ -55,7 +56,7 @@ vocals that the cascade of the student and KARA 2 takes out.
 
 ```bash
 musetric-distill label-voices --student student --kara kara2 --corpus open --manifest voices.json --labels voices
-musetric-distill train-voices --student student --labels voices --out split
+musetric-distill train-voices --student student --labels voices --excluded excluded.csv --out split
 musetric-distill data-ccmixter-voices --crawl ccmixter-crawl --out ccmixter-voices
 musetric-distill score-voices --student student --kara kara2 --cascade --checkpoint split/split.pt --golden ccmixter-voices/mix --out scores.json
 musetric-distill release-voices --student student --checkpoint split/split.pt --labels voices --corpus open --out release
@@ -72,3 +73,32 @@ cascade of the student and KARA 2 against true lead and backing stems.
 and backing parts are separate uploads (CC BY and CC0), as `acappella/` and,
 over the upload's own instrument stems, `mix/`; it is evaluation only, and its
 uploaders are kept out of training.
+
+## A listener's verdicts
+
+Where a listener says a clip has no voice, the teacher's vocals are not the
+target: the vocals and the backing are silent there, so the instrumental is
+the mix. `verdicts` turns the answers of closed rounds of
+`musetric-listening` into `verdicts.csv`: the clips with no voice split by
+artist into training and test, the clips with a voice as a check against
+losing it, and the doubtful answers kept out. `withheld.txt` lists the tracks
+of the artists on the side of the checks, which do not train at all.
+
+`train-verdicts` refines a released student from there: the last transformer
+pairs and both mask heads learn, the teacher runs online on every crop, and a
+share of the examples are the clips with no voice, with the target silent over
+the listened seconds and the usual one around them.
+
+```bash
+musetric-distill verdicts --round rounds/a --round rounds/b --corpus open/fma.json --excluded excluded.csv --out verdicts
+musetric-distill train-verdicts --release student --teacher teacher --labels voices --verdicts verdicts/verdicts.csv --withheld verdicts/withheld.txt --excluded excluded.csv --out run
+musetric-distill score-verdicts --model student --labels voices --verdicts verdicts/verdicts.csv --out scores/current.json
+musetric-distill score-verdicts --model run/final --labels voices --verdicts verdicts/verdicts.csv --out scores/run.json
+musetric-distill compare-verdicts --verdicts verdicts/verdicts.csv --baseline scores/current.json --candidate scores/run.json
+musetric-distill score-paired --model run/final --name run --baseline current --checks checks --musdb musdb --golden ccmixter-voices
+```
+
+`score-verdicts` measures each stem against the mix over the listened seconds;
+`compare-verdicts` gives the paired change on the test clips and, for contrast,
+on the training clips, so that a gain that holds only where the labels were
+placed shows; `score-paired` is the check on true stems.

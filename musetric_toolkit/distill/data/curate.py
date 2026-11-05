@@ -13,6 +13,7 @@ import soundfile as sf
 from musetric_toolkit.distill.corpus import load
 from musetric_toolkit.distill.data.duplicates import within
 from musetric_toolkit.distill.data.fma_fetch import raw_tracks
+from musetric_toolkit.distill.excluded import add_excluded, read_excluded
 from musetric_toolkit.distill.teacher import SAMPLE_RATE
 
 LOG = logging.getLogger(__name__)
@@ -73,6 +74,7 @@ PELL_GENRE = "a cappella"
 SPOKEN = "Spoken"
 HISTORIC = "Old-Time / Historic"
 REJECTED_NOTE = "instrumental (no lead vocal)"
+EXCLUDED_REASON = "excluded by a listener"
 VOICED = ("vocal", "vocal-only")
 
 INSTRUMENTAL_DB = -40
@@ -408,6 +410,8 @@ def build(args) -> list[dict]:
     measured(rows, args)
     skipped = skipped_in_labelling(args.label_logs)
     decisions = {r["id"]: r for r in read_rows(args.decisions)}
+    for track in read_excluded(args.excluded):
+        decisions[track] = dict(decision="trash", reason=EXCLUDED_REASON)
     for row in rows:
         decide(row, skipped, decisions)
     note_artists(rows, open_count)
@@ -678,6 +682,7 @@ def add_parser(commands, common) -> None:
         type=Path,
         help="CSV of hand-made decisions (id, decision, reason) over the rules",
     )
+    add_excluded(parser)
     parser.add_argument(
         "--label-logs",
         type=Path,

@@ -18,6 +18,7 @@
     "english": {
       "except": [
         "musetric_toolkit/chords_audio/chordmini/**",
+        "musetric_toolkit/listening/stand/messages.ru.json",
         "musetric_toolkit/pitch_audio/rmvpe/**",
         "musetric_toolkit/transcribe_audio/hallucination_filter.py",
         "thirdPartyNotices.md"

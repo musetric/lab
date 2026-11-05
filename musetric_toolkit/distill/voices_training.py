@@ -8,6 +8,7 @@ from pathlib import Path
 
 import torch
 
+from musetric_toolkit.distill.excluded import add_excluded, read_excluded
 from musetric_toolkit.distill.losses import multi_stft_l1
 from musetric_toolkit.distill.precision import PRECISION
 from musetric_toolkit.distill.voices import load_lead_backing, load_split
@@ -20,9 +21,15 @@ LOG_EVERY = 25
 
 
 class Prefetcher:
-    def __init__(self, sampler: VoicesSampler, size: int, depth: int = 4):
+    def __init__(
+        self,
+        sampler: VoicesSampler,
+        size: int,
+        fields: tuple[str, ...] = ("x", "vocals", "backing"),
+        depth: int = 4,
+    ):
         self.queue: queue.Queue = queue.Queue(depth)
-        self.sampler, self.size = sampler, size
+        self.sampler, self.size, self.fields = sampler, size, fields
         threading.Thread(target=self.fill, daemon=True).start()
 
     def fill(self) -> None:
@@ -34,7 +41,7 @@ class Prefetcher:
         examples = self.queue.get()
         return [
             torch.stack([getattr(e, f) for e in examples]).cuda(non_blocking=True)
-            for f in ("x", "vocals", "backing")
+            for f in self.fields
         ]
 
 
@@ -112,7 +119,8 @@ def save(out: Path, model, optimizer, progress: tuple[int, float], args) -> None
 
 
 def evaluate(out: Path, model, args, step: int, elapsed: float) -> None:
-    rows = held_out_scores(model, args.labels, args.eval_tracks)
+    excluded = read_excluded(args.excluded)
+    rows = held_out_scores(model, args.labels, args.eval_tracks, excluded)
     row = dict(step=step, minutes=elapsed / 60, **summary(rows))
     with open(out / "evals.jsonl", "a", encoding="utf-8") as f:
         f.write(json.dumps(row) + "\n")
@@ -155,7 +163,10 @@ def train_voices(args) -> None:
     options = VoicesOptions(
         remix=args.remix, backing=args.backing_share, pell=args.pell_share
     )
-    prefetch = Prefetcher(VoicesSampler(args.labels, args.seed, options), args.batch)
+    sampler = VoicesSampler(
+        args.labels, args.seed, options, read_excluded(args.excluded)
+    )
+    prefetch = Prefetcher(sampler, args.batch)
     model.train()
     if args.eval_tracks and not args.no_start_eval:
         evaluate(args.out, model, args, step, elapsed_before)
@@ -199,6 +210,7 @@ def add_parser(commands, common) -> None:
     )
     parser.add_argument("--student", required=True, type=Path)
     parser.add_argument("--labels", required=True, type=Path)
+    add_excluded(parser)
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--init", type=Path)
     parser.add_argument(
