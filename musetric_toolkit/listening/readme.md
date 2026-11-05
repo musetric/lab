@@ -15,7 +15,7 @@ ticks what sounds in the song itself.
 ## Rules
 
 - A system is an argument: `name=release folder` of a `LeadBackingRoformer`, or `name=vocals teacher folder,KARA 2 folder`. Its name is written only to `key.json`.
-- `select` never picks a track of the CSV given as `--excluded`, kept on the tracker and never in the repository; `check-round`, `features` and `report` take it too.
+- `select` never picks a track of the CSV given as `--excluded`, kept as an artifact of musetric/musetric#1203 and never in the repository; `check-round`, `features` and `report` take it too.
 - `/key.json` and `/selection.json` are not served, and `check-round` fails on a manifest that gives away a system, a group or a track.
 - Round data, clips and labels never enter the repository; a listener's verdicts stay in the round.
 - The page speaks Russian to its listener: its words are in `stand/messages.ru.json`, and `build` copies the titles of stems and classes from there into the manifest.
