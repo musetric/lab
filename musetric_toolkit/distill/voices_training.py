@@ -20,9 +20,15 @@ LOG_EVERY = 25
 
 
 class Prefetcher:
-    def __init__(self, sampler: VoicesSampler, size: int, depth: int = 4):
+    def __init__(
+        self,
+        sampler: VoicesSampler,
+        size: int,
+        fields: tuple[str, ...] = ("x", "vocals", "backing"),
+        depth: int = 4,
+    ):
         self.queue: queue.Queue = queue.Queue(depth)
-        self.sampler, self.size = sampler, size
+        self.sampler, self.size, self.fields = sampler, size, fields
         threading.Thread(target=self.fill, daemon=True).start()
 
     def fill(self) -> None:
@@ -34,7 +40,7 @@ class Prefetcher:
         examples = self.queue.get()
         return [
             torch.stack([getattr(e, f) for e in examples]).cuda(non_blocking=True)
-            for f in ("x", "vocals", "backing")
+            for f in self.fields
         ]
 
 

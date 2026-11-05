@@ -27,6 +27,7 @@ def check():
         f"{CHECKS} links",
         f"{CHECKS} comments",
         DEPS,
+        "uv run --no-project python -m musetric_toolkit.distill.excluded",
         "uv run --only-group check ruff check . --no-cache",
         "uv run --only-group check isort . --check-only",
         "uv run --only-group check black . --check",
