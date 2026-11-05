@@ -100,8 +100,23 @@ await page.evaluate(() => document.activeElement.blur());
 const clipBefore = await page.evaluate(() => clip().id);
 await page.keyboard.press("Enter");
 await page.waitForTimeout(100);
+const untouched = await page.evaluate(() => ({ clip: clip().id, done: label().done, cards: document.querySelectorAll(".card[data-stem]").length, hint: $("doneHint").textContent }));
+check("Enter refuses an empty song and asks no comparison yet", untouched.clip === clipBefore && !untouched.done && untouched.cards === 0 && untouched.hint === messages.markOrUnsure, JSON.stringify(untouched));
+await page.locator('[data-present="instrumental"]').check();
+const single = await page.evaluate(() => ({ cards: document.querySelectorAll(".card[data-stem]").length, hint: $("doneHint").textContent }));
+check("one stem in the song asks no comparison", single.cards === 0 && single.hint === messages.idealKnown, JSON.stringify(single));
+await page.locator('[data-unsure]').check();
+const unsure = await page.evaluate(() => ({ cards: document.querySelectorAll(".card[data-stem]").length, present: label().present.length }));
+check("an unsure song clears the ticks and asks the comparison", unsure.cards === 3 && unsure.present === 0, JSON.stringify(unsure));
+await page.locator('[data-present="lead"]').check();
+await page.locator('[data-present="instrumental"]').check();
+const cleared = await page.evaluate(() => ({ unsure: label().unsure, box: document.querySelector("[data-unsure]").checked, cards: document.querySelectorAll(".card[data-stem]").length }));
+check("two stems clear unsure and ask the comparison", !cleared.unsure && !cleared.box && cleared.cards === 3, JSON.stringify(cleared));
+await page.evaluate(() => document.activeElement.blur());
+await page.keyboard.press("Enter");
+await page.waitForTimeout(100);
 const refused = await page.evaluate(() => ({ clip: clip().id, done: label().done, flagged: document.querySelectorAll(".card.missing").length }));
-check("Enter refuses without the three comparisons", refused.clip === clipBefore && !refused.done && refused.flagged === 3, JSON.stringify(refused));
+check("Enter refuses two stems without the three comparisons", refused.clip === clipBefore && !refused.done && refused.flagged === 3, JSON.stringify(refused));
 await card("lead").locator('[data-better="b"]').click();
 await card("backing").locator('[data-better="unknown"]').click();
 await page.keyboard.press("Enter");
@@ -193,6 +208,11 @@ const server2 = {
 check("the server refuses an incomplete clip", Object.values(server2).every((code) => code === 400), JSON.stringify(server2));
 const oldPage = await post({ clip: firstClip, data: { regions: [], content: "one", stems: (await page.evaluate(() => emptyLabel())).stems, comment: "", done: false } });
 check("the server still takes a page opened before the ticks", oldPage === 200, String(oldPage));
+const ticked = (present) => page.evaluate((list) => ({ ...emptyLabel(), present: list, done: true }), present);
+const oneStem = await post({ clip: firstClip, data: await ticked(["instrumental"]) });
+check("the server takes one stem without a comparison", oneStem === 200, String(oneStem));
+const twoStems = await post({ clip: firstClip, data: await ticked(["lead", "instrumental"]) });
+check("the server refuses two stems without a comparison", twoStems === 400, String(twoStems));
 const server = {
   badClip: await page.evaluate(() => fetch("/api/save", { method: "POST", body: JSON.stringify({ clip: "nope", data: { regions: [] } }) }).then((r) => r.status)),
   badClass: await page.evaluate(() => fetch("/api/save", { method: "POST", body: JSON.stringify({ clip: clip().id, data: { ...emptyLabel(), regions: [{ cls: "nope", stem: "mix", polygon: [[0, 100], [1, 100], [1, 200]] }] } }) }).then((r) => r.status)),

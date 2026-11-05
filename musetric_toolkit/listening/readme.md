@@ -8,8 +8,9 @@ labels it on, and reports the answers. The flags of a subcommand are in its
 A round is a folder outside the repository with `selection.json`, `clips/`,
 `manifest.json` for the page, `key.json` with the system behind A and B and why
 a clip was chosen, and the listener's `labels.json` and `labels.log.jsonl`. It
-has one of two forms: without `--ask` the listener compares A and B per stem and
-may outline sounds on the spectrogram; with `--ask present` the listener only
+has one of two forms: without `--ask` the listener ticks what sounds in the song and,
+only where more than one stem sounds, compares A and B per stem and may outline
+sounds on the spectrogram, since one stem alone has a known ideal; with `--ask present` the listener only
 ticks what sounds in the song itself.
 
 ## Rules

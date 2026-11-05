@@ -84,13 +84,19 @@ class StandRound:
             return False
         return valid_polygon(region.get("polygon"))
 
+    def needs_comparison(self, data: dict) -> bool:
+        if self.asks_present:
+            return False
+        present = data.get("present")
+        return present is None or len(present) != 1
+
     def valid_stems(self, data: dict) -> bool:
         stems = data.get("stems")
         if not isinstance(stems, dict) or set(stems) != set(GROUPS):
             return False
         if not all(valid_stem_answer(group, stems[group]) for group in GROUPS):
             return False
-        if not data.get("done") or self.asks_present:
+        if not data.get("done") or not self.needs_comparison(data):
             return True
         return all(stems[group].get("better") in ANSWERS for group in GROUPS)
 
@@ -102,9 +108,9 @@ class StandRound:
             return False
         if data.get("unsure") not in (None, False, True):
             return False
-        if not data.get("done") or not self.asks_present:
+        if not data.get("done"):
             return True
-        return bool(present or data.get("unsure"))
+        return bool(present or data.get("unsure") or data.get("content"))
 
     def valid_label(self, clip, data) -> bool:
         if clip not in self.clips or not isinstance(data, dict):

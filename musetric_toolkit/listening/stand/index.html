@@ -111,12 +111,12 @@ details ul { padding-left: 16px; margin: 6px 0; }
   <aside id="side">
     <div id="private" hidden></div>
     <div id="intro" data-html="intro"></div>
-    <div id="cards"></div>
     <div class="card">
-      <h3><span data-text="song"></span> <small id="presentNote" data-text="songNote"></small></h3>
+      <h3><span data-text="song"></span> <small data-text="required"></small></h3>
       <div class="question" id="presentAsk" data-text="songAsk"></div>
       <div class="foreign" id="present"></div>
     </div>
+    <div id="cards"></div>
     <div>
       <h2 data-text="commentTitle"></h2>
       <textarea id="comment" data-placeholder="commentPlaceholder"></textarea>
@@ -210,11 +210,16 @@ function presentOf(data) {
 function asksPresent() {
   return state.manifest.ask === "present";
 }
+function needsComparison(data) {
+  if (asksPresent()) return false;
+  if (data.content && !data.present) return true;
+  return presentOf(data).length > 1 || Boolean(data.unsure);
+}
 function missingStems(data) {
-  return asksPresent() ? [] : STEM_GROUPS.filter((group) => !data.stems[group.id].better);
+  return needsComparison(data) ? STEM_GROUPS.filter((group) => !data.stems[group.id].better) : [];
 }
 function missingPresent(data) {
-  return asksPresent() && !presentOf(data).length && !data.unsure;
+  return !presentOf(data).length && !data.unsure;
 }
 function normalizeLabel(data) {
   if (!data.stems) {
@@ -398,12 +403,31 @@ function renderPresent(data) {
       remember();
       const ticked = presentOf(data);
       data.present = box.checked ? [...ticked, group.id] : ticked.filter((v) => v !== group.id);
+      data.unsure = false;
+      host.querySelector("[data-unsure]").checked = false;
+      renderCards(data);
       renderList();
       touch();
     };
     item.append(box, document.createTextNode(t("hasStem", { stem: group.title.toLowerCase() })));
     host.append(item);
   });
+  const item = document.createElement("label");
+  const box = document.createElement("input");
+  box.type = "checkbox";
+  box.dataset.unsure = "1";
+  box.checked = Boolean(data.unsure);
+  box.onchange = () => {
+    remember();
+    data.unsure = box.checked;
+    if (box.checked) data.present = [];
+    renderPresent(data);
+    renderCards(data);
+    renderList();
+    touch();
+  };
+  item.append(box, document.createTextNode(messages.better.unknown));
+  host.append(item);
 }
 
 function stemKey(stemId) {
@@ -414,6 +438,10 @@ function renderCards(data) {
   const host = $("cards");
   host.innerHTML = "";
   if (asksPresent()) return;
+  if (!needsComparison(data)) {
+    $("doneHint").textContent = missingPresent(data) ? t("markOrUnsure") : t("idealKnown");
+    return;
+  }
   const missing = missingStems(data);
   STEM_GROUPS.forEach((group) => {
     const stem = data.stems[group.id];
@@ -1281,7 +1309,6 @@ async function start() {
     $("loop").className = "on";
     $("tool").hidden = true;
     $("intro").innerHTML = t("introTicks");
-    $("presentNote").textContent = t("required");
     $("presentAsk").innerHTML = t("songAskTicks");
     $("hints").innerHTML = t("hintsTicks");
   }
