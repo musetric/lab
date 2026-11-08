@@ -1,7 +1,6 @@
 import numpy as np
 
 _MIN_BEATS = 2
-_MIN_INTERVALS_FOR_IQR = 4
 _MIN_PREFERRED_BPM = 60.0
 _MAX_PREFERRED_BPM = 160.0
 _PROBE_COUNT = 5
@@ -15,18 +14,11 @@ def estimate_bpm(beats: np.ndarray) -> float:
     if len(beats) < _MIN_BEATS:
         return 0.0
     intervals = np.diff(beats)
-    if len(intervals) >= _MIN_INTERVALS_FOR_IQR:
-        q1, q3 = np.percentile(intervals, [25, 75])
-        iqr = q3 - q1
-        lo = q1 - 1.5 * iqr
-        hi = q3 + 1.5 * iqr
-        filtered = intervals[(intervals >= lo) & (intervals <= hi)]
-        if len(filtered) > 0:
-            intervals = filtered
-    median_interval = float(np.median(intervals))
-    if median_interval <= 0:
+    step = float(np.median(intervals))
+    if step <= 0:
         return 0.0
-    return 60.0 / median_interval
+    one_beat_intervals = intervals[np.floor(intervals / step + 0.5) == 1]
+    return 60.0 / float(np.mean(one_beat_intervals))
 
 
 def estimate_meter(
