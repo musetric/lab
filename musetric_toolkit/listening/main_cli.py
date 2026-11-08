@@ -373,9 +373,9 @@ def add_build(commands, common) -> None:
         action="append",
         type=system_spec,
         help=(
-            "A system compared in the round, given twice: name=release folder of a "
-            "LeadBackingRoformer, or name=vocals teacher folder,KARA 2 folder. "
-            "The names go to key.json"
+            "A system compared in the round, given twice, or once for a review: "
+            "name=release folder of a LeadBackingRoformer, or name=vocals teacher "
+            "folder,KARA 2 folder. The names go to key.json"
         ),
     )
     parser.add_argument(
@@ -386,8 +386,12 @@ def add_build(commands, common) -> None:
     parser.add_argument("--out", required=True, type=Path, help="Folder of the round")
     parser.add_argument(
         "--ask",
-        choices=["present"],
-        help="present makes a round of ticks about the song, without comparisons",
+        choices=["present", "review", "better"],
+        help=(
+            "present makes a round of ticks about the song, without comparisons; "
+            "review shows one system's stems for a score and a verdict on the track; "
+            "better asks only which of the two systems is better as a whole"
+        ),
     )
     parser.add_argument(
         "--default-stem", default="lead_a", help="The stem a clip opens on"

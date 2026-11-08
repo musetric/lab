@@ -57,6 +57,9 @@ input[type=range] { width: 90px; accent-color: var(--accent); }
 .foreign b { width: 16px; font-weight: 600; }
 .answers { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .answers button { padding: 9px 8px; }
+.answers [data-drop], .scores { grid-column: 1 / -1; }
+.scores { display: flex; gap: 4px; }
+.scores button { flex: 1; min-width: 0; padding: 7px 0; white-space: nowrap; }
 .foreign label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
 .required { color: var(--bad); }
 #doneBar { position: sticky; bottom: -10px; background: var(--panel); padding: 6px 0 10px; }
@@ -112,7 +115,7 @@ details ul { padding-left: 16px; margin: 6px 0; }
     <div id="private" hidden></div>
     <div id="intro" data-html="intro"></div>
     <div class="card">
-      <h3><span data-text="song"></span> <small data-text="required"></small></h3>
+      <h3><span id="songTitle" data-text="song"></span> <small data-text="required"></small></h3>
       <div class="question" id="presentAsk" data-text="songAsk"></div>
       <div class="foreign" id="present"></div>
     </div>
@@ -135,6 +138,8 @@ const $ = (id) => document.getElementById(id);
 const STEM_KEYS = ["KeyQ", "KeyW", "KeyE", "KeyR", "KeyT", "KeyY", "KeyU"];
 const OLD_CONTENT = { none: ["instrumental"], one: ["lead"], lead_backing: ["lead", "backing"] };
 const BETTER = ["a", "b", "same", "unknown"];
+const MAX_SCORE = 10;
+const CHOICES = ["a", "b", "same"];
 const STEM_GROUPS = [
   { id: "lead", foreign: ["backing", "instrumental"] },
   { id: "backing", foreign: ["lead", "instrumental"] },
@@ -210,8 +215,17 @@ function presentOf(data) {
 function asksPresent() {
   return state.manifest.ask === "present";
 }
+function asksReview() {
+  return state.manifest.ask === "review";
+}
+function asksBetter() {
+  return state.manifest.ask === "better";
+}
+function simpleForm() {
+  return asksPresent() || asksReview() || asksBetter();
+}
 function needsComparison(data) {
-  if (asksPresent()) return false;
+  if (simpleForm()) return false;
   if (data.content && !data.present) return true;
   return presentOf(data).length > 1 || Boolean(data.unsure);
 }
@@ -219,7 +233,13 @@ function missingStems(data) {
   return needsComparison(data) ? STEM_GROUPS.filter((group) => !data.stems[group.id].better) : [];
 }
 function missingPresent(data) {
+  if (asksReview()) return data.score == null && !data.drop;
+  if (asksBetter()) return !data.better;
   return !presentOf(data).length && !data.unsure;
+}
+function missingText() {
+  if (asksBetter()) return t("markBetter");
+  return t(asksReview() ? "markScore" : "markOrUnsure");
 }
 function normalizeLabel(data) {
   if (!data.stems) {
@@ -316,7 +336,8 @@ function renderList() {
       const stem = data.stems[group.id];
       return stem.better || stem.comment || stem.foreign.a.length || stem.foreign.b.length;
     });
-    const touched = data && (data.regions.length || presentOf(data).length || data.unsure || data.comment || answered);
+    const reviewed = data && (data.score != null || data.drop);
+    const touched = data && (data.regions.length || presentOf(data).length || data.unsure || data.comment || answered || reviewed);
     if (data && data.done) done += 1;
     const row = document.createElement("button");
     row.className = i === state.index ? "current" : "";
@@ -389,7 +410,67 @@ function renderAnswers(data) {
   host.append(unsure);
   $("doneHint").textContent = state.showMissing && missingPresent(data) ? t("markOrUnsure") : "";
 }
+function setScore(value) {
+  remember();
+  const data = label();
+  data.score = data.score === value ? null : value;
+  renderForm();
+  touch();
+}
+function toggleDrop() {
+  remember();
+  const data = label();
+  data.drop = !data.drop;
+  renderForm();
+  touch();
+}
+function renderReview(data) {
+  const host = $("present");
+  host.innerHTML = "";
+  host.className = "answers";
+  const drop = document.createElement("button");
+  drop.dataset.drop = "1";
+  drop.className = data.drop ? "on" : "";
+  drop.innerHTML = `${t("dropTrack")}<kbd>X</kbd>`;
+  drop.onclick = toggleDrop;
+  host.append(drop);
+  const scores = document.createElement("div");
+  scores.className = "scores";
+  for (let value = 0; value <= MAX_SCORE; value += 1) {
+    const button = document.createElement("button");
+    button.dataset.score = String(value);
+    button.className = data.score === value ? "on" : "";
+    button.innerHTML = value === MAX_SCORE ? `${value}<kbd>0</kbd>` : String(value);
+    button.onclick = () => setScore(value);
+    scores.append(button);
+  }
+  host.append(scores);
+  $("doneHint").textContent = state.showMissing && missingPresent(data) ? t("markScore") : "";
+}
+function setBetter(value) {
+  remember();
+  const data = label();
+  data.better = data.better === value ? null : value;
+  renderForm();
+  touch();
+}
+function renderBetter(data) {
+  const host = $("present");
+  host.innerHTML = "";
+  host.className = "answers";
+  CHOICES.forEach((value, index) => {
+    const button = document.createElement("button");
+    button.dataset.choice = value;
+    button.className = data.better === value ? "on" : "";
+    button.innerHTML = `${messages.choice[value]}<kbd>${index + 1}</kbd>`;
+    button.onclick = () => setBetter(value);
+    host.append(button);
+  });
+  $("doneHint").textContent = state.showMissing && missingPresent(data) ? t("markBetter") : "";
+}
 function renderPresent(data) {
+  if (asksBetter()) { renderBetter(data); return; }
+  if (asksReview()) { renderReview(data); return; }
   if (asksPresent()) { renderAnswers(data); return; }
   const host = $("present");
   host.innerHTML = "";
@@ -437,7 +518,7 @@ function stemKey(stemId) {
 function renderCards(data) {
   const host = $("cards");
   host.innerHTML = "";
-  if (asksPresent()) return;
+  if (simpleForm()) return;
   if (!needsComparison(data)) {
     $("doneHint").textContent = missingPresent(data) ? t("markOrUnsure") : t("idealKnown");
     return;
@@ -547,7 +628,7 @@ function renderForm() {
   privateNote.textContent = item.note || "";
   const license = credit.license_url ? `<a href="${credit.license_url}" target="_blank" rel="noreferrer">${credit.license}</a>` : (credit.license || "");
   const page = credit.page ? ` · <a href="${credit.page}" target="_blank" rel="noreferrer">${t("creditPage")}</a>` : "";
-  $("credit").innerHTML = credit.artist && !asksPresent() ? `${credit.artist} — ${credit.title}<br>${license}${page}` : "";
+  $("credit").innerHTML = credit.artist && !simpleForm() ? `${credit.artist} — ${credit.title}<br>${license}${page}` : "";
 }
 
 function bounds(polygon) {
@@ -571,9 +652,9 @@ function renderSelection() {
     host.innerHTML = t("measuring", { left });
     return;
   }
-  if (!region && asksPresent()) {
+  if (!region && simpleForm()) {
     const note = state.measureNote ? ` ${state.measureNote}` : "";
-    host.innerHTML = `<span class="hint">${t("ticksHint")}${note}</span>`;
+    host.innerHTML = `<span class="hint">${asksPresent() ? t("ticksHint") : ""}${note}</span>`;
     return;
   }
   if (!region) {
@@ -856,7 +937,7 @@ function stemCanvas(stem) {
 async function loadClip(index, autoplay = false) {
   pause();
   state.index = index;
-  if (asksPresent()) state.stem = state.manifest.default_stem;
+  if (simpleForm()) state.stem = state.manifest.default_stem;
   state.pending = null; state.selected = null; state.boost = null; state.position = 0; state.showMissing = false;
   $("loading").hidden = false;
   renderAll();
@@ -964,7 +1045,7 @@ function draw() {
     paint.font = "12px system-ui";
     paint.fillText(item.title, toX(b.t0) + 2, toY(b.f1) - 3);
   });
-  const drawn = state.pending ? state.pending.polygon : state.drag && state.drag.moved && !asksPresent() ? dragPolygon(state.drag) : null;
+  const drawn = state.pending ? state.pending.polygon : state.drag && state.drag.moved && !simpleForm() ? dragPolygon(state.drag) : null;
   if (drawn) {
     const path = polygonPath(drawn);
     paint.setLineDash([5, 4]);
@@ -1059,7 +1140,7 @@ canvas.addEventListener("pointerup", (event) => {
   state.drag = null;
   if (!d) return;
   const p = clampPoint(event);
-  if (d.moved && !asksPresent()) {
+  if (d.moved && !simpleForm()) {
     d.points.push([fromX(p.x), fromY(p.y)]);
     const polygon = roundPolygon(dragPolygon(d));
     if (polygon.length >= 3) {
@@ -1196,7 +1277,7 @@ function finishClip() {
   if (missingPresent(label())) {
     state.showMissing = true;
     renderForm();
-    setStatus(t("markOrUnsure"), true);
+    setStatus(missingText(), true);
     return;
   }
   const missing = missingStems(label());
@@ -1215,7 +1296,7 @@ function finishClip() {
   for (let step = 1; step <= clips.length; step += 1) {
     const i = (state.index + step) % clips.length;
     const data = state.labels[clips[i].id];
-    if (!data || !data.done) { loadClip(i, asksPresent()); return; }
+    if (!data || !data.done) { loadClip(i, simpleForm()); return; }
   }
   setStatus(t("allDone"));
   renderAll();
@@ -1260,6 +1341,17 @@ window.addEventListener("keydown", (event) => {
   if (event.ctrlKey || event.metaKey || event.altKey) return;
   const stemIndex = STEM_KEYS.indexOf(event.code);
   if (stemIndex >= 0 && state.manifest.stems[stemIndex]) { setStem(state.manifest.stems[stemIndex].id); return; }
+  if (event.code.startsWith("Digit") && asksReview()) {
+    const digit = Number(event.code.slice(5));
+    setScore(digit === 0 ? MAX_SCORE : digit);
+    return;
+  }
+  if (event.code === "KeyX" && asksReview()) { toggleDrop(); return; }
+  if (event.code.startsWith("Digit") && asksBetter()) {
+    const choice = CHOICES[Number(event.code.slice(5)) - 1];
+    if (choice) setBetter(choice);
+    return;
+  }
   if (event.code.startsWith("Digit") && asksPresent()) {
     const digit = Number(event.code.slice(5));
     if (digit === STEM_GROUPS.length + 1) toggleUnsure();
@@ -1273,11 +1365,11 @@ window.addEventListener("keydown", (event) => {
   }
   switch (event.code) {
     case "Space": event.preventDefault(); if (field && field.blur) field.blur(); togglePlay(); break;
-    case "KeyS": if (!asksPresent()) audition("only"); break;
-    case "KeyD": if (!asksPresent()) audition("without"); break;
+    case "KeyS": if (!simpleForm()) audition("only"); break;
+    case "KeyD": if (!simpleForm()) audition("without"); break;
     case "KeyL": $("loop").click(); break;
     case "KeyG": $("slow").click(); break;
-    case "KeyF": if (!asksPresent()) $("tool").click(); break;
+    case "KeyF": if (!simpleForm()) $("tool").click(); break;
     case "Escape": state.pending = null; state.selected = null; state.boost = null; renderSelection(); state.dirty = true; break;
     case "Delete": case "Backspace": removeSelected(); break;
     case "Enter": event.preventDefault(); if (field && field.blur) field.blur(); finishClip(); break;
@@ -1304,13 +1396,27 @@ async function start() {
   Object.values(state.labels).forEach(normalizeLabel);
   state.stem = state.manifest.default_stem || state.manifest.stems[1].id;
   $("title").textContent = t("roundTitle", { round: state.manifest.round });
-  if (asksPresent()) {
+  if (simpleForm()) {
     state.loop = true;
     $("loop").className = "on";
     $("tool").hidden = true;
+  }
+  if (asksPresent()) {
     $("intro").innerHTML = t("introTicks");
     $("presentAsk").innerHTML = t("songAskTicks");
     $("hints").innerHTML = t("hintsTicks");
+  }
+  if (asksReview()) {
+    $("intro").innerHTML = t("introReview");
+    $("songTitle").textContent = t("review");
+    $("presentAsk").innerHTML = t("reviewAsk");
+    $("hints").innerHTML = t("hintsReview");
+  }
+  if (asksBetter()) {
+    $("intro").innerHTML = t("introBetter");
+    $("songTitle").textContent = t("betterTitle");
+    $("presentAsk").innerHTML = t("betterAsk");
+    $("hints").innerHTML = t("hintsBetter");
   }
   resetView();
   renderDelay();

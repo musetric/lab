@@ -13,16 +13,19 @@ from musetric_toolkit.listening.pictures import (
     DB_FLOOR,
     FMIN,
     OCTAVES,
+    REVIEW_STEMS,
     STEMS,
     WIDTH,
     write_clip,
 )
 from musetric_toolkit.listening.round_files import (
+    ASK_REVIEW,
     CLIPS,
     KEY,
     MANIFEST,
     MESSAGES,
     SELECTION,
+    SYSTEMS_IN_REVIEW,
     SYSTEMS_IN_ROUND,
     corpus_tracks,
     read_json,
@@ -45,7 +48,10 @@ CLASS_COLORS = dict(
 )
 
 
-def stem_rows(messages: dict) -> list[dict]:
+def stem_rows(messages: dict, review: bool) -> list[dict]:
+    if review:
+        titles = messages["stemsReview"]
+        return [dict(id=stem, title=titles[stem]) for stem in REVIEW_STEMS]
     return [dict(id=stem, title=messages["stems"][stem]) for stem in STEMS]
 
 
@@ -120,27 +126,21 @@ def draw_sides(rng, names: list[str]) -> tuple[str, str]:
     return (first, second) if rng.random() < HALF else (second, first)
 
 
-def save_raw_clip(folder: Path, mix: np.ndarray, a: dict, b: dict) -> None:
+def save_raw_clip(folder: Path, mix: np.ndarray, sides: dict[str, dict]) -> None:
     folder.mkdir(parents=True, exist_ok=True)
-    arrays = dict(
-        mix=mix,
-        lead_a=a["lead"],
-        lead_b=b["lead"],
-        backing_a=a["backing"],
-        backing_b=b["backing"],
-        instrumental_a=a["instrumental"],
-        instrumental_b=b["instrumental"],
-    )
+    arrays = dict(mix=mix)
+    for side, stems in sides.items():
+        for group in ("lead", "backing", "instrumental"):
+            arrays[f"{group}_{side}"] = stems[group]
     for name, value in arrays.items():
         np.save(folder / f"{name}.raw.npy", value.astype(np.float32))
 
 
-def key_row(entry: dict, a: str, b: str) -> dict:
+def key_row(entry: dict, sides: dict[str, str]) -> dict:
     row = dict(
         source=entry["source"],
         sign=entry["sign"],
-        a=a,
-        b=b,
+        **sides,
         start_s=entry["start_s"],
         train=entry.get("train", True),
         scores=entry.get("scores"),
@@ -169,7 +169,7 @@ def make_manifest(args: argparse.Namespace, clips: list[dict]) -> dict:
         rate=RATE,
         default_stem=args.default_stem,
         spectrum=dict(fmin=FMIN, octaves=OCTAVES, width=WIDTH, db_floor=DB_FLOOR),
-        stems=stem_rows(messages),
+        stems=stem_rows(messages, args.ask == ASK_REVIEW),
         classes=class_rows(messages),
         clips=clips,
     )
@@ -177,6 +177,11 @@ def make_manifest(args: argparse.Namespace, clips: list[dict]) -> dict:
 
 def system_names(args: argparse.Namespace) -> list[str]:
     names = [name for name, _ in args.system]
+    if args.ask == ASK_REVIEW:
+        if len(names) != SYSTEMS_IN_REVIEW:
+            message = f"a review shows one system, not {names}"
+            raise ValueError(message)
+        return names
     if len(names) != SYSTEMS_IN_ROUND or len(set(names)) != SYSTEMS_IN_ROUND:
         message = f"a round compares two different systems, not {names}"
         raise ValueError(message)
@@ -198,11 +203,14 @@ def separate_clips(args: argparse.Namespace, selection: list[dict]) -> tuple:
             if systems is None:
                 systems = {name: load_system(name, f) for name, f in args.system}
             stems, mix = stems_from_systems(entry, systems, args)
-        a, b = draw_sides(rng, names)
+        if len(names) == SYSTEMS_IN_REVIEW:
+            sides = dict(a=names[0])
+        else:
+            sides = dict(zip(("a", "b"), draw_sides(rng, names), strict=True))
         folder = args.out / CLIPS / clip_id
-        save_raw_clip(folder, mix, stems[a], stems[b])
+        save_raw_clip(folder, mix, {side: stems[name] for side, name in sides.items()})
         clips.append(manifest_row(clip_id, entry, tracks, pages))
-        key[clip_id] = key_row(entry, a, b)
+        key[clip_id] = key_row(entry, sides)
         LOG.info("separated %s", clip_id)
     return clips, key
 

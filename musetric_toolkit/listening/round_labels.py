@@ -51,7 +51,7 @@ def kind_of(row: dict) -> str:
 
 
 def sides_of(entry: dict) -> dict[str, str]:
-    return {entry[side]: side for side in SIDES}
+    return {entry[side]: side for side in SIDES if entry.get(side)}
 
 
 def clip_levels(folder: Path, clip: str, entry: dict) -> dict[str, dict]:

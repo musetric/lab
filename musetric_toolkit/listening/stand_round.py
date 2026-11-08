@@ -10,7 +10,9 @@ import soundfile
 
 from musetric_toolkit.listening.audition import audition
 from musetric_toolkit.listening.round_files import (
+    ASK_BETTER,
     ASK_PRESENT,
+    ASK_REVIEW,
     CLIPS,
     LABELS,
     LABELS_LOG,
@@ -20,10 +22,12 @@ from musetric_toolkit.listening.round_files import (
 from musetric_toolkit.listening.round_labels import GROUPS, SIDES
 
 ANSWERS = {"a", "b", "same", "unknown"}
+CHOICES = {"a", "b", "same"}
 MIN_POINTS = 3
 MAX_POINTS = 2000
 POINT_SIZE = 2
 CACHED_STEMS = 28
+SCORES = range(11)
 
 
 def valid_point(point) -> bool:
@@ -62,6 +66,8 @@ class StandRound:
         self.stems = {stem["id"] for stem in self.manifest["stems"]}
         self.classes = {item["id"] for item in self.manifest["classes"]}
         self.asks_present = self.manifest.get("ask") == ASK_PRESENT
+        self.asks_review = self.manifest.get("ask") == ASK_REVIEW
+        self.asks_better = self.manifest.get("ask") == ASK_BETTER
         self.labels_path = folder / LABELS
         self.log_path = folder / LABELS_LOG
         self.lock = threading.Lock()
@@ -85,7 +91,7 @@ class StandRound:
         return valid_polygon(region.get("polygon"))
 
     def needs_comparison(self, data: dict) -> bool:
-        if self.asks_present:
+        if self.asks_present or self.asks_review or self.asks_better:
             return False
         present = data.get("present")
         return present is None or len(present) != 1
@@ -108,14 +114,34 @@ class StandRound:
             return False
         if data.get("unsure") not in (None, False, True):
             return False
-        if not data.get("done"):
+        if not data.get("done") or self.asks_review or self.asks_better:
             return True
         return bool(present or data.get("unsure") or data.get("content"))
+
+    def valid_review(self, data: dict) -> bool:
+        score, drop = data.get("score"), data.get("drop")
+        if drop not in (None, False, True):
+            return False
+        if score is not None and (type(score) is not int or score not in SCORES):
+            return False
+        if not self.asks_review or not data.get("done"):
+            return True
+        return score is not None or bool(drop)
+
+    def valid_better(self, data: dict) -> bool:
+        better = data.get("better")
+        if better is not None and better not in CHOICES:
+            return False
+        if not self.asks_better or not data.get("done"):
+            return True
+        return better is not None
 
     def valid_label(self, clip, data) -> bool:
         if clip not in self.clips or not isinstance(data, dict):
             return False
         if not self.valid_stems(data) or not self.valid_present(data):
+            return False
+        if not self.valid_review(data) or not self.valid_better(data):
             return False
         regions = data.get("regions", [])
         if not isinstance(regions, list):

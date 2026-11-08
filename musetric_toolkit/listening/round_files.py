@@ -12,7 +12,10 @@ MANIFEST = "manifest.json"
 SELECTION = "selection.json"
 CORPUS_TRACKS = "fma.json"
 ASK_PRESENT = "present"
+ASK_REVIEW = "review"
+ASK_BETTER = "better"
 SYSTEMS_IN_ROUND = 2
+SYSTEMS_IN_REVIEW = 1
 
 
 def read_json(path: Path):

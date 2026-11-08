@@ -12,7 +12,9 @@ from PIL import Image
 from musetric_toolkit.distill.excluded import read_excluded
 from musetric_toolkit.listening.levels import QUIET_POWER
 from musetric_toolkit.listening.round_files import (
+    ASK_BETTER,
     ASK_PRESENT,
+    ASK_REVIEW,
     CLIPS,
     KEY,
     MANIFEST,
@@ -57,7 +59,8 @@ def served_text(manifest: dict) -> str:
 def key_words(key: dict) -> set[str]:
     words = set()
     for entry in key.values():
-        words |= {entry["a"], entry["b"], entry["sign"], entry["source"]}
+        words |= {entry["sign"], entry["source"]}
+        words |= {entry[side] for side in "ab" if entry.get(side)}
     return {word.lower() for word in words}
 
 
@@ -96,7 +99,7 @@ def read_clip_stems(folder: Path, clip: str, manifest: dict, verdict: Verdict) -
 
 def check_sums(clip: str, data: dict, args, verdict: Verdict) -> list[float]:
     sums = []
-    for side in "ab":
+    for side in (side for side in "ab" if f"lead_{side}" in data):
         restored = sum(data[f"{group}_{side}"] for group in GROUPS)
         noise = ((restored - data["mix"]) ** 2).sum() + QUIET_POWER
         snr = float(10 * np.log10((data["mix"] ** 2).sum() / noise))
@@ -167,8 +170,9 @@ def check_form(manifest: dict, verdict: Verdict) -> None:
     stems = [item["id"] for item in manifest["stems"]]
     if manifest["default_stem"] not in stems:
         verdict.fail(f"the default stem {manifest['default_stem']} is not a stem")
-    if manifest.get("ask") == ASK_PRESENT and manifest["default_stem"] != "mix":
-        verdict.fail("a round of ticks must start from the mix")
+    simple = manifest.get("ask") in (ASK_PRESENT, ASK_REVIEW, ASK_BETTER)
+    if simple and manifest["default_stem"] != "mix":
+        verdict.fail("a round of ticks, a review or a choice must start from the mix")
 
 
 def check_round_command(args) -> None:

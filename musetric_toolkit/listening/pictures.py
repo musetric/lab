@@ -27,6 +27,7 @@ STEMS = (
     "instrumental_a",
     "instrumental_b",
 )
+REVIEW_STEMS = ("mix", "lead_a", "backing_a", "instrumental_a")
 
 
 def cqt_at(channel: np.ndarray, scale: float) -> np.ndarray:
@@ -65,16 +66,17 @@ def picture(power: np.ndarray, reference: float, path: Path, duration: float) ->
 
 def write_clip(job: tuple[str, float]) -> str:
     folder, duration = Path(job[0]), job[1]
-    data = {name: np.load(folder / f"{name}.raw.npy") for name in STEMS}
+    names = [name for name in STEMS if (folder / f"{name}.raw.npy").exists()]
+    data = {name: np.load(folder / f"{name}.raw.npy") for name in names}
     peak = max(float(np.abs(value).max()) for value in data.values())
     gain = PEAK / peak if peak > PEAK else 1.0
     powers = {}
-    for name in STEMS:
+    for name in names:
         wave = (data[name] * gain).T
         soundfile.write(folder / f"{name}.wav", wave, RATE, subtype="FLOAT")
         powers[name] = cqt_power(data[name] * gain)
     reference = float(powers["mix"].max())
-    for name in STEMS:
+    for name in names:
         picture(powers[name], reference, folder / f"{name}.png", duration)
         (folder / f"{name}.raw.npy").unlink()
     return folder.name

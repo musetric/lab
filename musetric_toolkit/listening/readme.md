@@ -1,17 +1,21 @@
 # Listening rounds
 
-`musetric-listening` runs a blind listening round of two separation systems:
-it searches the corpus for clips, builds the round, serves the stand a listener
+`musetric-listening` runs a blind listening round of two separation systems,
+or a review of one system's stems: it searches the corpus for clips, builds the round, serves the stand a listener
 labels it on, and reports the answers. The flags of a subcommand are in its
 `--help`; every path is an argument.
 
 A round is a folder outside the repository with `selection.json`, `clips/`,
 `manifest.json` for the page, `key.json` with the system behind A and B and why
 a clip was chosen, and the listener's `labels.json` and `labels.log.jsonl`. It
-has one of two forms: without `--ask` the listener ticks what sounds in the song and,
+has one of four forms: without `--ask` the listener ticks what sounds in the song and,
 only where more than one stem sounds, compares A and B per stem and may outline
 sounds on the spectrogram, since one stem alone has a known ideal; with `--ask present` the listener only
-ticks what sounds in the song itself.
+ticks what sounds in the song itself; with `--ask review` the round shows the stems
+of one system, such as the targets a training will take, and the listener scores
+how close they are to the ideal from 0 to 10 or marks the track to be dropped; with
+`--ask better` the listener only says whether A or B is better as a whole, or that
+they are the same.
 
 ## Rules
 
@@ -46,6 +50,12 @@ musetric-listening select --excluded excluded.csv --labels labels --levels level
 musetric-listening build --selection rounds/round3/selection.json --labels labels --corpus corpus --system old=releases/old --system new=releases/new --out rounds/round3
 ```
 
+A review names one system, and every entry of its selection carries `stems`:
+
+```bash
+musetric-listening build --selection rounds/round7/selection.json --labels labels --corpus corpus --system target= --ask review --default-stem mix --id-width 3 --clip-seconds 29.9 --out rounds/round7
+```
+
 `scan`, `words` and `teacher` go on where a stopped run ended. A `selection.json`
 entry with `stems` maps each system to a folder of stems separated beforehand,
 and with `train: false` and a `note` it is a clip that is not for training.
@@ -59,4 +69,5 @@ musetric-listening serve --round tmp/check --port 8770
 node stand/checks/smoke_present.mjs http://127.0.0.1:8770 tmp/shots playwright-home
 ```
 
-`smoke.mjs` is the same check for a round that compares A and B.
+`smoke.mjs` is the same check for a round that compares A and B,
+`smoke_review.mjs` for a review and `smoke_better.mjs` for a round of `--ask better`.
