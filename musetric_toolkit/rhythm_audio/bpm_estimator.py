@@ -1,6 +1,7 @@
 import numpy as np
 
 _MIN_BEATS = 2
+_STEP_TOLERANCE = 0.125
 _MIN_PREFERRED_BPM = 60.0
 _MAX_PREFERRED_BPM = 160.0
 _PROBE_COUNT = 5
@@ -17,8 +18,8 @@ def estimate_bpm(beats: np.ndarray) -> float:
     step = float(np.median(intervals))
     if step <= 0:
         return 0.0
-    one_beat_intervals = intervals[np.floor(intervals / step + 0.5) == 1]
-    return 60.0 / float(np.mean(one_beat_intervals))
+    near_step = intervals[np.abs(intervals / step - 1) < _STEP_TOLERANCE]
+    return 60.0 / float(np.mean(near_step))
 
 
 def estimate_meter(
