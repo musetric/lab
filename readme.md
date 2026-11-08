@@ -42,6 +42,10 @@ musetric-separate --source-path song.wav --lead-path lead.flac \
   --backing-path backing.flac --instrumental-path instrumental.flac --sample-rate 48000
 ```
 
+Each call loads the model, and decodes and writes the stems on the CPU while the
+GPU waits, so a batch of tracks runs as a few calls at once, as many as the GPU
+memory holds.
+
 `musetric-transcribe` writes the lyrics of the lead vocal as the app does, with
 Whisper in torch (`--backing-path` adds the backing vocals at half level),
 `musetric-rhythm` the
