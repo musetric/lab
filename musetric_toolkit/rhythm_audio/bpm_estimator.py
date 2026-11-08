@@ -1,3 +1,5 @@
+from itertools import pairwise
+
 import numpy as np
 
 _MIN_BEATS = 2
@@ -9,6 +11,8 @@ _PROBE_SECONDS = 60.0
 _MIN_PROBE_SECONDS = 20.0
 _CLUSTER_RATIO = 1.08
 _DOUBLE_RATIO = 1.5
+_OCTAVE_TOLERANCE = 0.17
+_MIN_SECTION_INTERVALS = 4
 
 
 def estimate_bpm(beats: np.ndarray) -> float:
@@ -129,6 +133,78 @@ def every_other_beat(beats: np.ndarray, downbeats: np.ndarray) -> np.ndarray:
     return kept if len(kept) >= _MIN_BEATS else beats
 
 
+def find_octave_sections(
+    beats: np.ndarray,
+    period: float,
+) -> list[tuple[int, int, int]]:
+    with np.errstate(divide="ignore", invalid="ignore"):
+        exact = np.log2(np.diff(beats) / period)
+        nearest = np.floor(exact + 0.5)
+        close = np.abs(exact - nearest) < _OCTAVE_TOLERANCE
+    octaves = [
+        int(octave) if near else None
+        for octave, near in zip(nearest, close, strict=True)
+    ]
+    sections = []
+    first = 0
+    for index in range(1, len(octaves) + 1):
+        if index == len(octaves) or octaves[index] != octaves[first]:
+            octave = octaves[first]
+            if octave in (-1, 1) and index - first >= _MIN_SECTION_INTERVALS:
+                sections.append((octave, first, index))
+            first = index
+    return sections
+
+
+def fit_sections_to_tempo(
+    beats: np.ndarray,
+    downbeats: np.ndarray,
+    period: float,
+) -> tuple[np.ndarray, list[tuple[float, float]]]:
+    fitted: list[float] = []
+    sections: list[tuple[float, float]] = []
+    following = 0
+    for octave, first, last in find_octave_sections(beats, period):
+        fitted.extend(beats[following:first].tolist())
+        own = beats[first : last + 1]
+        start = float(own[0])
+        end = float(own[-1])
+        if octave < 0:
+            inside = downbeats[(downbeats >= start) & (downbeats <= end)]
+            fitted.extend(every_other_beat(own, inside).tolist())
+        else:
+            for left, right in pairwise(own):
+                fitted.extend([float(left), float((left + right) / 2)])
+            fitted.append(end)
+        sections.append((start, end))
+        following = last + 1
+    fitted.extend(beats[following:].tolist())
+    return np.asarray(fitted, dtype=np.float64), sections
+
+
+def align_bars_in_sections(
+    beats: np.ndarray,
+    sections: list[tuple[float, float]],
+    downbeats: np.ndarray,
+    meter: int,
+) -> np.ndarray:
+    positions = {time: position for position, time in enumerate(beats.tolist())}
+    aligned: list[float] = []
+    for time in downbeats.tolist():
+        position = positions.get(time)
+        previous = positions.get(aligned[-1]) if aligned else None
+        if position is None:
+            continue
+        in_section = any(start < time <= end for start, end in sections)
+        if not in_section or previous is None:
+            aligned.append(time)
+        elif position - previous >= meter:
+            if position - previous == 2 * meter:
+                aligned.append(float(beats[previous + meter]))
+            aligned.append(time)
+    return np.asarray(aligned, dtype=np.float64)
+
+
 def summarize_rhythm(
     beats: np.ndarray,
     downbeats: np.ndarray,
@@ -137,17 +213,21 @@ def summarize_rhythm(
     probes = consecutive_probe_bpms(beats, duration)
     bpm = consensus_bpm(probes if probes else [estimate_bpm(beats)])
     raw = estimate_bpm(beats)
-    if bpm <= 0 or raw <= 0 or raw / bpm < _DOUBLE_RATIO:
+    if bpm <= 0 or raw <= 0:
         return bpm, beats, downbeats, estimate_meter(beats, downbeats)
-    folded_beats = every_other_beat(beats, downbeats)
-    kept = set(folded_beats.tolist())
-    folded_downbeats = np.asarray(
-        [time for time in downbeats if time in kept],
-        dtype=beats.dtype,
+    halved_beats = (
+        beats if raw / bpm < _DOUBLE_RATIO else every_other_beat(beats, downbeats)
     )
-    return (
-        bpm,
-        folded_beats,
-        folded_downbeats,
-        estimate_meter(folded_beats, folded_downbeats),
+    kept = set(halved_beats.tolist())
+    halved_downbeats = np.asarray(
+        [time for time in downbeats.tolist() if time in kept],
+        dtype=np.float64,
     )
+    fitted, sections = fit_sections_to_tempo(halved_beats, halved_downbeats, 60.0 / bpm)
+    fitted_downbeats = align_bars_in_sections(
+        fitted,
+        sections,
+        halved_downbeats,
+        estimate_meter(halved_beats, halved_downbeats),
+    )
+    return bpm, fitted, fitted_downbeats, estimate_meter(fitted, fitted_downbeats)
