@@ -99,13 +99,13 @@ def every_other_beat(beats: np.ndarray, origin: float) -> np.ndarray:
     if len(beats) < _MIN_BEATS:
         return beats
     intervals = np.diff(beats)
-    if len(intervals) == 0:
-        return beats
     step = float(np.median(intervals))
     if step <= 0:
         return beats
-    index = np.round((beats - origin) / step)
-    kept = beats[index % 2 == 0]
+    steps = np.floor(intervals / step + 0.5).astype(np.int64)
+    counts = np.concatenate(([0], np.cumsum(steps)))
+    origin_count = counts[np.flatnonzero(beats == origin)[0]]
+    kept = beats[(counts - origin_count) % 2 == 0]
     return kept if len(kept) >= _MIN_BEATS else beats
 
 
