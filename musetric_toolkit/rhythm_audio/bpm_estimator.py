@@ -1,7 +1,7 @@
 import numpy as np
 
 _MIN_BEATS = 2
-_MIN_INTERVALS_FOR_IQR = 4
+_STEP_TOLERANCE = 0.125
 _MIN_PREFERRED_BPM = 60.0
 _MAX_PREFERRED_BPM = 160.0
 _PROBE_COUNT = 5
@@ -15,18 +15,11 @@ def estimate_bpm(beats: np.ndarray) -> float:
     if len(beats) < _MIN_BEATS:
         return 0.0
     intervals = np.diff(beats)
-    if len(intervals) >= _MIN_INTERVALS_FOR_IQR:
-        q1, q3 = np.percentile(intervals, [25, 75])
-        iqr = q3 - q1
-        lo = q1 - 1.5 * iqr
-        hi = q3 + 1.5 * iqr
-        filtered = intervals[(intervals >= lo) & (intervals <= hi)]
-        if len(filtered) > 0:
-            intervals = filtered
-    median_interval = float(np.median(intervals))
-    if median_interval <= 0:
+    step = float(np.median(intervals))
+    if step <= 0:
         return 0.0
-    return 60.0 / median_interval
+    near_step = intervals[np.abs(intervals / step - 1) < _STEP_TOLERANCE]
+    return 60.0 / float(np.mean(near_step))
 
 
 def estimate_meter(
@@ -95,7 +88,25 @@ def consensus_bpm(bpms: list[float]) -> float:
     return float(np.median(cluster))
 
 
-def every_other_beat(beats: np.ndarray, origin: float) -> np.ndarray:
+def keep_from_latest_downbeat(
+    counts: np.ndarray,
+    downbeat_counts: np.ndarray,
+) -> np.ndarray:
+    latest = np.maximum(np.searchsorted(downbeat_counts, counts, side="right") - 1, 0)
+    return (counts - downbeat_counts[latest]) % 2 == 0
+
+
+def keep_on_downbeat_parity(
+    counts: np.ndarray,
+    downbeat_counts: np.ndarray,
+) -> np.ndarray:
+    even = int(np.sum(downbeat_counts % 2 == 0))
+    odd = len(downbeat_counts) - even
+    parity = int(downbeat_counts[0] % 2) if even == odd else int(odd > even)
+    return counts % 2 == parity
+
+
+def every_other_beat(beats: np.ndarray, downbeats: np.ndarray) -> np.ndarray:
     if len(beats) < _MIN_BEATS:
         return beats
     intervals = np.diff(beats)
@@ -104,8 +115,17 @@ def every_other_beat(beats: np.ndarray, origin: float) -> np.ndarray:
         return beats
     steps = np.floor(intervals / step + 0.5).astype(np.int64)
     counts = np.concatenate(([0], np.cumsum(steps)))
-    origin_count = counts[np.flatnonzero(beats == origin)[0]]
-    kept = beats[(counts - origin_count) % 2 == 0]
+    downbeat_counts = (
+        counts[np.searchsorted(beats, downbeats)]
+        if len(downbeats) > 0
+        else np.zeros(1, dtype=np.int64)
+    )
+    bars = np.diff(downbeat_counts)
+    if len(bars) == 0 or round(float(np.median(bars))) % 2 == 0:
+        keep = keep_from_latest_downbeat(counts, downbeat_counts)
+    else:
+        keep = keep_on_downbeat_parity(counts, downbeat_counts)
+    kept = beats[keep]
     return kept if len(kept) >= _MIN_BEATS else beats
 
 
@@ -119,8 +139,7 @@ def summarize_rhythm(
     raw = estimate_bpm(beats)
     if bpm <= 0 or raw <= 0 or raw / bpm < _DOUBLE_RATIO:
         return bpm, beats, downbeats, estimate_meter(beats, downbeats)
-    origin = float(downbeats[0]) if len(downbeats) > 0 else float(beats[0])
-    folded_beats = every_other_beat(beats, origin)
+    folded_beats = every_other_beat(beats, downbeats)
     kept = set(folded_beats.tolist())
     folded_downbeats = np.asarray(
         [time for time in downbeats if time in kept],
