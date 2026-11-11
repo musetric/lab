@@ -1,0 +1,15 @@
+{
+  "name": "engine-bench-android",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "scripts": {
+    "build": "node build.mjs",
+    "env": "node decode_pages.mjs chrome env"
+  },
+  "dependencies": {
+    "esbuild": "0.28.2",
+    "playwright": "1.65.0",
+    "signalsmith-stretch": "1.3.2"
+  }
+}

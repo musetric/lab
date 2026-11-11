@@ -1,0 +1,28 @@
+<!doctype html><meta charset="utf-8" /><title>timing</title>
+<script>
+  let w,
+    n = 0;
+  const pend = new Map();
+  window.send = (msg) =>
+    new Promise((resolve, reject) => {
+      if (!w) {
+        w = new Worker('/web/timing-worker.js', { type: 'module' });
+        w.onmessage = (e) => {
+          if (e.data.log) {
+            console.log('W', e.data.log);
+            return;
+          }
+          const p = pend.get(e.data.id);
+          pend.delete(e.data.id);
+          e.data.error ? p.reject(new Error(e.data.error)) : p.resolve(e.data.result);
+        };
+        w.onerror = (e) => {
+          for (const p of pend.values()) p.reject(new Error('worker error ' + e.message));
+        };
+      }
+      const id = ++n;
+      pend.set(id, { resolve, reject });
+      w.postMessage({ ...msg, id });
+    });
+  window.ready = true;
+</script>
