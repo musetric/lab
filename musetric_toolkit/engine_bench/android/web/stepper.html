@@ -1,0 +1,22 @@
+<!doctype html><meta charset="utf-8" /><title>stepper</title>
+<script>
+  window.runScenario = (msg) =>
+    new Promise((resolve, reject) => {
+      const w = new Worker('/dist/stepper-worker.js', { type: 'module' });
+      w.onmessage = (e) => {
+        if (e.data.loaded) w.postMessage(msg);
+        else if (e.data.result) {
+          w.terminate();
+          resolve(e.data.result);
+        } else if (e.data.error) {
+          w.terminate();
+          reject(new Error(e.data.error));
+        }
+      };
+      w.onerror = (e) => {
+        w.terminate();
+        reject(new Error('worker error ' + e.message));
+      };
+    });
+  window.ready = true;
+</script>

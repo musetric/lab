@@ -1,17 +1,17 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
 export const SR = 48000;
 export const Q = 128;
 export const BUDGET_US = (Q / SR) * 1e6;
-const here = path.dirname(fileURLToPath(import.meta.url));
 
-const source = fs.readFileSync(
-  path.join(here, 'node_modules/signalsmith-stretch/SignalsmithStretch.mjs'),
-  'utf8',
-);
+const readStretchSourceInNode = async () => {
+  const { readFile } = await import('node:fs/promises');
+  return readFile(new URL('./node_modules/signalsmith-stretch/SignalsmithStretch.mjs', import.meta.url), 'utf8');
+};
+const fetchStretchSourceFromServerVendorRoute = async () => (await fetch('/vendor/SignalsmithStretch.mjs')).text();
+let source;
 export const createModule = async () => {
+  source ??= globalThis.process?.versions?.node
+    ? await readStretchSourceInNode()
+    : await fetchStretchSourceFromServerVendorRoute();
   const i = source.indexOf('function registerWorkletProcessor');
   const factory = new Function(`${source.slice(0, i)}; return SignalsmithStretch;`)();
   return factory();
@@ -237,6 +237,7 @@ export const render = (opts) => {
   let seekCostMs = 0;
   const now = () => performance.now();
   for (let k = 0; k < nQ; k += 1) {
+    if (opts.pace) opts.pace(k);
     const q0 = timing !== 'none' ? now() : 0;
     for (const ev of events) {
       if (ev.k !== k) continue;

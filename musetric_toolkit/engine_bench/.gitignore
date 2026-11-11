@@ -6,3 +6,4 @@ wav/
 certs/
 target/
 reports.jsonl
+dist/

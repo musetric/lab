@@ -19,7 +19,7 @@
 - `musetric_toolkit/chords_audio`: chord detection and recognition.
 - `musetric_toolkit/pitch_audio`: the reference pitch track the Musetric pitch bench scores against (RMVPE, CREPE, SwiftF0 and FCPE combined).
 - `musetric_toolkit/pitch_zoo`: pitch models, ground truth and the metrics of the bench that check that reference (`musetric-pitch-zoo`).
-- `musetric_toolkit/engine_bench`: Node and browser stands of the audio engine research of musetric/musetric#1201: paged AAC and FLAC decoding, time-stretch modes, the render quantum of the real worklet runtime, a worker-to-worklet page pool, and running them on an iPhone from a Mac.
+- `musetric_toolkit/engine_bench`: Node and browser stands of the audio engine research of musetric/musetric#1201: paged AAC and FLAC decoding, time-stretch modes, the render quantum of the real worklet runtime, a worker-to-worklet page pool, and running them on an Android phone over adb and on an iPhone from a Mac.
 - `musetric_toolkit/common`: shared utilities (logging, paths, env, model files).
 - `scripts/`: dev tooling (lint checks); `scripts/onnx/`: the ONNX export of each model, one directory with its readme per model.
 
