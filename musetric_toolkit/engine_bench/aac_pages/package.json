@@ -1,0 +1,15 @@
+{
+  "name": "aac-pages",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "scripts": {
+    "inputs": "node gen.mjs && node ../shared/encode.mjs data --flac && node lib/make-mfra.mjs data/mix240.mp4 data/mix240_mfra.mp4",
+    "check:index": "node lib/test-index.mjs",
+    "bench": "node run.mjs msedge env,controls,indexcheck,correctness,bench,parallel,mem,flac"
+  },
+  "dependencies": {
+    "mediabunny": "1.61.4",
+    "playwright": "1.65.0"
+  }
+}

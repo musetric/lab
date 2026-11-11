@@ -1,0 +1,8 @@
+node_modules/
+data/
+out/
+results/
+wav/
+certs/
+target/
+reports.jsonl

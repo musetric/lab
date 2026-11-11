@@ -1,0 +1,13 @@
+<!doctype html><meta charset="utf-8"><title>aac-pages</title>
+<script>
+  const workers = new Map();
+  window.callWorker = (id, cmd, args) => new Promise((resolve, reject) => {
+    let w = workers.get(id);
+    if (!w) { w = new Worker('/web/worker.js', { type: 'module' }); workers.set(id, w); w.pending = new Map(); w.n = 0;
+      w.onmessage = (e) => { const p = w.pending.get(e.data.n); w.pending.delete(e.data.n); e.data.error ? p.reject(new Error(e.data.error)) : p.resolve(e.data.result); };
+      w.onerror = (e) => { for (const p of w.pending.values()) p.reject(new Error('worker error ' + e.message)); }; }
+    const n = ++w.n; w.pending.set(n, { resolve, reject }); w.postMessage({ n, cmd, args });
+  });
+  window.killWorker = (id) => { workers.get(id)?.terminate(); workers.delete(id); };
+  window.ready = true;
+</script>
