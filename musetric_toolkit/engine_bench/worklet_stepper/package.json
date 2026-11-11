@@ -1,0 +1,17 @@
+{
+  "name": "worklet-stepper",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "build": "node build.mjs",
+    "alloc": "node orchestrate.mjs alloc 3",
+    "time": "node orchestrate.mjs time 3",
+    "loops": "node dist/loops.mjs"
+  },
+  "dependencies": {
+    "esbuild": "0.28.2",
+    "mpg123-decoder": "1.0.3",
+    "signalsmith-stretch": "1.3.2"
+  }
+}

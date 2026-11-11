@@ -1,0 +1,14 @@
+{
+  "name": "stretch-modes",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "smoke": "node smoke.mjs",
+    "timing": "node timing.mjs",
+    "accuracy": "node accuracy_run.mjs && node accuracy_report.mjs"
+  },
+  "dependencies": {
+    "signalsmith-stretch": "1.3.2"
+  }
+}

@@ -1,0 +1,29 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Musetric lab</title>
+<body style="font: 16px system-ui; padding: 16px">
+<h1>Musetric lab</h1>
+<pre id="out">checking...</pre>
+<script>
+(async () => {
+  const facts = {
+    ua: navigator.userAgent,
+    secureContext: isSecureContext,
+    crossOriginIsolated: self.crossOriginIsolated,
+    sharedArrayBuffer: typeof SharedArrayBuffer,
+    audioWorklet: typeof AudioWorkletNode,
+    audioDecoder: typeof AudioDecoder,
+    aac: typeof AudioDecoder === 'function'
+      ? (await AudioDecoder.isConfigSupported({ codec: 'mp4a.40.2', sampleRate: 48000, numberOfChannels: 2 })).supported
+      : null,
+    flac: typeof AudioDecoder === 'function'
+      ? (await AudioDecoder.isConfigSupported({ codec: 'flac', sampleRate: 48000, numberOfChannels: 2 }).catch((e) => String(e)))?.supported ?? null
+      : null,
+    playbackStats: typeof AudioContext === 'function' && 'playbackStats' in AudioContext.prototype,
+    renderSizeHint: (() => { try { const c = new AudioContext({ renderSizeHint: 256 }); const r = c.renderQuantumSize; c.close(); return r ?? 'no renderQuantumSize'; } catch (e) { return String(e); } })(),
+  };
+  document.getElementById('out').textContent = JSON.stringify(facts, null, 2);
+  await fetch('/report', { method: 'POST', body: JSON.stringify({ probe: 'hello', facts }) });
+})();
+</script>
