@@ -2,7 +2,7 @@
   "name": "@musetric/lab",
   "private": true,
   "devDependencies": {
-    "@musetric/checks": "0.2.0"
+    "@musetric/checks": "0.3.0"
   },
   "checks": {
     "comments": {

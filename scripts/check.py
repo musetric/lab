@@ -15,6 +15,7 @@ def run_commands(commands):
 
 
 CHECKS = "node node_modules/@musetric/checks/dist/cli.js"
+DEPS = "node node_modules/@musetric/checks/dist/deps.js"
 
 
 def check():
@@ -25,6 +26,7 @@ def check():
         f"{CHECKS} notices",
         f"{CHECKS} links",
         f"{CHECKS} comments",
+        DEPS,
         "uv run --only-group check ruff check . --no-cache",
         "uv run --only-group check isort . --check-only",
         "uv run --only-group check black . --check",
