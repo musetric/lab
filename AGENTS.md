@@ -5,7 +5,7 @@
 - This is a Python project managed with `uv`: Python comes from `requires-python` and uv from `required-version` in `pyproject.toml`.
 - Prefer existing `uv run` scripts and tools; use free-form commands only when no script exists.
 - `uv run` and `uv sync` first bring `.venv` to the pins and rebuild it when the pinned Python changes, which removes the packages of whatever runs from it. A one-off script runs with `uv run --no-project --with <package>` or `uvx` instead, which leave `.venv` alone, as headquarters [asks of a shared environment](https://github.com/musetric/headquarters/blob/main/practices/resources.md#share-with-others).
-- The repository checks of `@musetric/checks` (English letters, notices, links) come from npm: `npm ci` installs them and `scripts/check.py` runs them; a file where another language is part of its meaning goes to `checks.english.except` of `package.json`.
+- The repository checks of `@musetric/checks` (English letters, notices, links, comments, the dependencies of `package.json`) come from npm: `npm ci` installs them and `scripts/check.py` runs them; a file where another language is part of its meaning goes to `checks.english.except` of `package.json`.
 - The rules of the organization apply here and are not repeated: the [code](https://github.com/musetric/headquarters/blob/main/practices/code.md) of every repository, [what may be said about audio](https://github.com/musetric/headquarters/blob/main/practices/public-texts.md#material) and the other [practices](https://github.com/musetric/headquarters/blob/main/AGENTS.md#map). The rules below are this repository's own.
 
 ## Repository Map
