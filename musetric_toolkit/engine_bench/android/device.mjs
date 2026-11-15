@@ -221,7 +221,18 @@ export class RawPage {
 
 export const connectWebview = async () => {
   forwardCdp(`localabstract:${webviewSocket(webviewPackage())}`);
-  return RawPage.open(cdpPort);
+  const area = (target) => {
+    try {
+      const { width, height } = JSON.parse(target.description);
+      return width * height;
+    } catch {
+      return 0;
+    }
+  };
+  return RawPage.open(
+    cdpPort,
+    (targets) => targets.filter((t) => t.type === 'page').sort((a, b) => area(b) - area(a))[0],
+  );
 };
 
 export const front = (target) => {
