@@ -39,7 +39,7 @@ T.env = async () => {
   return r;
 };
 
-T.setup = async ({ kind = 'pages', stretchers = 1, stagger = true, latencyHint = 'interactive', bug = '' } = {}) => {
+T.setup = async ({ kind = 'pages', stretchers = 1, stagger = true, split = false, latencyHint = 'interactive', bug = '' } = {}) => {
   await T.teardown();
   seq = 0; gen = 0; lastAnchor = null; events.length = 0; anchorsRx = 0;
   ctx = new AudioContext({ latencyHint, sampleRate: SR });
@@ -75,7 +75,7 @@ T.setup = async ({ kind = 'pages', stretchers = 1, stagger = true, latencyHint =
   let cloned = true;
   try { node.port.postMessage({ t: 'init', port: mc.port2, wasmSource: prefix, wasmModule }, [mc.port2]); } catch (e) { cloned = String(e); }
   const rd = await ready;
-  if (stretchers !== 1 || !stagger) await T.cmd('stretchers', { count: stretchers, stagger });
+  if (stretchers !== 1 || !stagger || split) await T.cmd('stretchers', { count: stretchers, stagger, split });
   if (bug) node.port.postMessage({ t: 'bug', name: bug });
   return { kind, frames, poolBytes: wr.poolBytes, poolSize: wr.poolSize, wasm: rd, moduleCloned: cloned };
 };
@@ -202,8 +202,8 @@ T.seekLatency = async ({ kind = 'pages', mode = 'cold', n = 200, tempo = 1, stre
 const blockMain = (ms, every) => { jankTimer = setInterval(() => { const e = performance.now() + ms; while (performance.now() < e); }, every); };
 const stressUp = (n) => { const src = 'let x=0;for(;;){x+=Math.sqrt(x+1);if(x>1e12)x=0;}'; const url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' })); for (let i = 0; i < n; i++) stressWorkers.push(new Worker(url)); };
 const diff = (a, b) => { if (!a || !b) return null; const o = {}; for (const k of Object.keys(b)) if (typeof b[k] === 'number' && typeof a[k] === 'number') o[k] = +(b[k] - a[k]).toFixed(4); return o; };
-T.underrun = async ({ name, kind = 'pages', tempo = 1, stretchers = 1, loop = false, seekEveryMs = 0, seekMode = 'cold', jank = false, stress = 0, durationMs = 20000, warmupMs = 3000, stagger = true, latencyHint = 'interactive' }) => {
-  const su = await T.setup({ kind, stretchers, stagger, latencyHint });
+T.underrun = async ({ name, kind = 'pages', tempo = 1, stretchers = 1, loop = false, seekEveryMs = 0, seekMode = 'cold', jank = false, stress = 0, durationMs = 20000, warmupMs = 3000, stagger = true, split = false, latencyHint = 'interactive' }) => {
+  const su = await T.setup({ kind, stretchers, stagger, split, latencyHint });
   if (tempo !== 1 && kind === 'pages') await T.tempo(tempo);
   const total = frames[0];
   if (loop) { const from = 20 * SR + 777, to = 24 * SR + 777; await T.setLoop(true, from, to); T.seek(from - SR / 2); } else T.seek(10 * SR);
@@ -224,7 +224,7 @@ T.underrun = async ({ name, kind = 'pages', tempo = 1, stretchers = 1, loop = fa
   const ctxDur = s1.ctxTime - s0.ctxTime;
   await T.teardown();
   const n0 = s0.node.st, n1 = s1.node.st; const d = {}; for (const k of Object.keys(n1)) d[k] = +(n1[k] - n0[k]).toFixed(3);
-  return { name, kind, tempo, stretchers, loop, seekEveryMs, seekMode, jank, stress, stagger, latencyHint, nSeeks, wallMs: performance.now() - t0, ctxSeconds: ctxDur, outputLatency: null, playbackStatsStart: ps0, playbackStatsEnd: s1.playbackStats, playbackStatsDelta: diff(ps0, s1.playbackStats),
+  return { name, kind, tempo, stretchers, loop, seekEveryMs, seekMode, jank, stress, stagger, split, latencyHint, nSeeks, wallMs: performance.now() - t0, ctxSeconds: ctxDur, outputLatency: null, playbackStatsStart: ps0, playbackStatsEnd: s1.playbackStats, playbackStatsDelta: diff(ps0, s1.playbackStats),
     spike: d, quantaExpected: Math.round(ctxDur * SR / Q), worker: summarizeWorker(s1.worker), setupStretch: su.wasm, heapMoved: n1.heapMoved };
 };
 

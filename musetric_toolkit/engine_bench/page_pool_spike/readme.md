@@ -17,6 +17,9 @@ node run.mjs correctness '{"scenarios":["plain"]}'
 - `npm run inputs` generates three distinct synthetic 240 s stems as WAV and
   encodes them to fMP4 with the host encoder.
 - Microsoft Edge (`channel: msedge`), headed, on a loopback server; `memory`
-  needs Windows. Options go as a JSON second argument.
+  needs Windows. Options go as a JSON second argument; `underrun` takes its
+  scenarios as `defs`, where `split` spreads the stretchers' spectral blocks
+  over the interval (`configure(channels, block, interval, true)`). `OUT_DIR`
+  sets the folder of the results.
 - Prints one line per scenario and saves `out/<task>.json`.
 - `window.T` in `web/main.js` is the scenario API of the page.

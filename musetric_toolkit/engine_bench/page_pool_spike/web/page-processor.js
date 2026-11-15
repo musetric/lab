@@ -23,7 +23,7 @@ class PageProcessor extends AudioWorkletProcessor {
     this.fadePos = -1; this.seekFlag = 0; this.frac = 0;
     this.sinceAnchor = 0; this.dp = null; this.q = 0;
     this.bug = '';
-    this.nStretch = 1; this.stagger = true; this.stretch = []; this.mods = null;
+    this.nStretch = 1; this.stagger = true; this.split = false; this.stretch = []; this.mods = null;
     this.cap = null;
     this.seek = null;
     this.resetStats();
@@ -49,7 +49,7 @@ class PageProcessor extends AudioWorkletProcessor {
       case 'stop': this.motion = 0; this.invalidateStretchers(); this.ack(m.seq); this.anchor(); break;
       case 'tempo': if ((m.value === 1) !== (this.tempo === 1)) this.invalidateStretchers(); this.tempo = m.value; this.ack(m.seq); break;
       case 'loop': this.loopOn = m.on; this.loopFrom = m.from; this.loopTo = m.to; this.gen = m.gen; this.ack(m.seq); break;
-      case 'stretchers': this.nStretch = m.count; this.stagger = m.stagger; this.invalidateStretchers(); this.ack(m.seq); break;
+      case 'stretchers': this.nStretch = m.count; this.stagger = m.stagger; if (!!m.split !== this.split) this.configureStretchers(!!m.split); this.invalidateStretchers(); this.ack(m.seq); break;
       case 'capture': this.armCapture(m); break;
       case 'dump': this.dump(); break;
       case 'stats': this.port.postMessage({ t: 'stats', st: this.st, resident: this.residentCount(), q: this.q, cur: this.cur, motion: this.motion, gen: this.gen, nStretch: this.nStretch }); break;
@@ -78,19 +78,7 @@ class PageProcessor extends AudioWorkletProcessor {
       const mkOne = async () => {
         const mod = await factory({ __wasmModule: m.wasmModule });
         mod._main();
-        const channels = 2;
-        mod._presetDefault(channels, sampleRate);
-        mod._reset();
-        const inLat = mod._inputLatency(), outLat = mod._outputLatency();
-        const bufLen = Math.max(Q * 2, inLat + outLat + 4800, 7500);
-        const ptr = mod._setBuffers(channels, bufLen);
-        const heap = mod.HEAP8.buffer;
-        const inp = [], outp = [];
-        for (let c = 0; c < channels; c++) {
-          inp.push(new Float32Array(heap, ptr + bufLen * 4 * c, bufLen));
-          outp.push(new Float32Array(heap, ptr + bufLen * 4 * (c + channels), bufLen));
-        }
-        return { mod, heap, inLat, outLat, bufLen, inp, outp, primed: false, ho: 0, wait: 0 };
+        return this.configureStretcher({ mod, primed: false, ho: 0, wait: 0 }, false);
       };
       Promise.all([mkOne(), mkOne(), mkOne()]).then((a) => { this.stretch = a; this.port.postMessage({ t: 'ready', wasm: true, inLat: a[0].inLat, outLat: a[0].outLat, bufLen: a[0].bufLen }); })
         .catch((e) => this.port.postMessage({ t: 'ready', wasm: false, error: String(e && e.stack || e) }));
@@ -98,6 +86,24 @@ class PageProcessor extends AudioWorkletProcessor {
       this.port.postMessage({ t: 'ready', wasm: false, error: String(e && e.stack || e) });
     }
   }
+
+  configureStretcher(s, split) {
+    const channels = 2, mod = s.mod;
+    if (split) mod._configure(channels, Math.floor(sampleRate * 0.12), Math.floor(sampleRate * 0.03), true);
+    else mod._presetDefault(channels, sampleRate);
+    mod._reset();
+    s.inLat = mod._inputLatency(); s.outLat = mod._outputLatency();
+    s.bufLen = Math.max(Q * 2, s.inLat + s.outLat + 4800, 7500);
+    const ptr = mod._setBuffers(channels, s.bufLen);
+    s.heap = mod.HEAP8.buffer; s.inp = []; s.outp = [];
+    for (let c = 0; c < channels; c++) {
+      s.inp.push(new Float32Array(s.heap, ptr + s.bufLen * 4 * c, s.bufLen));
+      s.outp.push(new Float32Array(s.heap, ptr + s.bufLen * 4 * (c + channels), s.bufLen));
+    }
+    return s;
+  }
+
+  configureStretchers(split) { this.split = split; for (const s of this.stretch) this.configureStretcher(s, split); }
 
   invalidateStretchers() { for (let i = 0; i < this.stretch.length; i++) { this.stretch[i].primed = false; this.stretch[i].wait = this.stagger ? i * 4 : 0; } }
 

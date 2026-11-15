@@ -2,7 +2,7 @@ import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path'
 import { chromium } from 'playwright';
 import { startServer } from './server.mjs';
 
-const root = import.meta.dirname; const outDir = path.join(root, 'out'); fs.mkdirSync(outDir, { recursive: true });
+const root = import.meta.dirname; const outDir = path.resolve(process.env.OUT_DIR ?? path.join(root, 'out')); fs.mkdirSync(outDir, { recursive: true });
 const tasks = (process.argv[2] ?? 'env').split(','); const arg = process.argv[3] ? JSON.parse(process.argv[3]) : {};
 const save = (name, obj) => { const f = path.join(outDir, `${name}.json`); fs.writeFileSync(f, JSON.stringify(obj, null, 1)); console.log('saved', f); };
 const { server, port } = await startServer(); const base = `http://127.0.0.1:${port}`;
@@ -79,7 +79,7 @@ try {
       }
       if (task === 'underrun') {
         const dur = arg.durationMs ?? 20000;
-        const defs = [
+        const defs = arg.defs ?? [
           { name: 'plain' }, { name: 'tempo075_1st', tempo: 0.75, stretchers: 1 }, { name: 'tempo075_3st', tempo: 0.75, stretchers: 3 }, { name: 'tempo075_3st_aligned', tempo: 0.75, stretchers: 3, stagger: false },
           { name: 'loop4s', loop: true }, { name: 'loop4s_tempo075_3st', loop: true, tempo: 0.75, stretchers: 3 },
           { name: 'seeks500_cold', seekEveryMs: 500, seekMode: 'cold' }, { name: 'seeks500_near', seekEveryMs: 500, seekMode: 'near' },
