@@ -157,7 +157,7 @@ try {
           'noncontig',
           r.nonContiguous,
         );
-        save('callbacks', out);
+        save('callbacks' + (arg.tag ?? ''), out);
         await done(s);
       }
   }
@@ -206,7 +206,7 @@ try {
             '->',
             r.infoAfter?.baseLatency ?? '-',
           );
-          save('bug', out);
+          save('bug' + (arg.tag ?? ''), out);
           await done(s);
         }
   }
@@ -253,7 +253,7 @@ try {
       );
       out.runs.at(-1).rows1 = rows1.filter((_, i) => i % 5 === 0);
       out.runs.at(-1).rows2 = rows2.filter((_, i) => i % 5 === 0);
-      save('clock', out);
+      save('clock' + (arg.tag ?? ''), out);
       await done(s);
     }
   }
