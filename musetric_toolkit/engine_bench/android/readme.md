@@ -115,7 +115,9 @@ and `STEM_S` (`stepper.mjs`).
   `npm run inputs` in `../page_pool_spike` first. `underrun` reads
   `AudioContext.playbackStats` and takes a `kind` of `pages` or `whole`;
   `memory` polls `dumpsys meminfo` of every Chrome process about four times a
-  second. Output: `out/page_pool-<task>.json`.
+  second, with `--local` for a process that gives no total, such as the
+  native-only renderer of Chrome on a Galaxy S24. Output:
+  `out/page_pool-<task>.json`.
 - `platform_probes.mjs <task> [json]`: `renderSize` (`renderSizeHint` and the
   quantum the worklet sees), `callbacks` (how many quanta come per callback and
   the gaps), `bug` (a Chromium issue: suspend and resume after a worklet stall,

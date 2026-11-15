@@ -24,7 +24,7 @@ const memProcs = () =>
       L.ADB,
       [
         'shell',
-        'ps -A -o PID,NAME | grep com.android.chrome | while read p n; do echo "$p $n"; dumpsys meminfo $p | grep "TOTAL PSS"; done',
+        'ps -A -o PID,NAME | grep com.android.chrome | while read p n; do echo "$p $n"; dumpsys meminfo $p | grep "TOTAL PSS" || dumpsys meminfo --local $p | grep "TOTAL PSS"; done',
       ],
       { maxBuffer: 1 << 26 },
       (e, out) => {
@@ -38,7 +38,7 @@ const memProcs = () =>
           procs.push({
             name: m[2]
               .replace('com.android.chrome', 'chrome')
-              .replace(/:org\.chromium\.content\.app\.SandboxedProcessService\d+/, ''),
+              .replace(/:org\.chromium\.content\.app\.(NativeOnly)?SandboxedProcessService\d+/, ''),
             pid: +m[1],
             pssMB: +(+t[1] / 1024).toFixed(1),
             rssMB: +(+t[2] / 1024).toFixed(1),

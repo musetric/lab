@@ -17,7 +17,7 @@ const cycles = +values.cycles;
 const openWaitMs = +values['open-wait'] * 1000;
 const closeWaitMs = +values['close-wait'] * 1000;
 
-const listing = `for p in $(ps -A -o PID,NAME | grep -E "${pkg}|webview:sandboxed|webview:privileged" | while read p n; do echo $p; done); do n=$(cat /proc/$p/cmdline | tr "\\0" " "); echo "$p $n"; dumpsys meminfo $p | grep "TOTAL PSS"; done`;
+const listing = `for p in $(ps -A -o PID,NAME | grep -E "${pkg}|webview:sandboxed|webview:privileged" | while read p n; do echo $p; done); do n=$(cat /proc/$p/cmdline | tr "\\0" " "); echo "$p $n"; dumpsys meminfo $p | grep "TOTAL PSS" || dumpsys meminfo --local $p | grep "TOTAL PSS"; done`;
 
 const snapshot = () => {
   const lines = device.sh(listing).replace(/\r/g, '').split('\n');
