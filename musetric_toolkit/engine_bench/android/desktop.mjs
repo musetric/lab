@@ -27,7 +27,7 @@ const close = async () => {
   child.kill();
   await new Promise((resolve) => child.once('exit', resolve));
   await sleep(500);
-  fs.rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  fs.rmSync(profile, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 });
 };
 
 export const connect = async () => {
@@ -40,6 +40,7 @@ export const connect = async () => {
     '--no-default-browser-check',
     '--force_high_performance_gpu',
     '--autoplay-policy=no-user-gesture-required',
+    '--disable-features=CalculateNativeWinOcclusion',
     'about:blank',
   ]);
   browser = { child, profile };
