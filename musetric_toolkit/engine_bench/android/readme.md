@@ -27,11 +27,12 @@ result.
 3. Pages are opened as `http://localhost:<port>` on the phone, which is a
    secure context (WebCodecs and AudioWorklet need one). The script starts a
    server on a free port of the computer and maps it with
-   `adb reverse tcp:<port> tcp:<port>`; at the end it removes every
-   `adb reverse` and `adb forward` of the device. Every request goes over USB,
-   so page fetches are slower than on a loopback.
+   `adb reverse tcp:<port> tcp:<port>`; at the end it removes the
+   `adb reverse` and `adb forward` mappings it made, and no others. Every
+   request goes over USB, so page fetches are slower than on a loopback.
 4. Chrome: `device.mjs` forwards the DevTools socket
-   `chrome_devtools_remote` to a local port and attaches Playwright with
+   `chrome_devtools_remote` to the local port `CDP_PORT` (9333 by default;
+   give each phone its own when two run at once) and attaches Playwright with
    `connectOverCDP`; Chrome is started if it is not running, and
    `page_pool.mjs` and `platform_probes.mjs` restart it with
    `am force-stop` before every configuration so that each one gets a fresh
@@ -56,15 +57,22 @@ Which scripts need what:
 
 | Script | Needs |
 | --- | --- |
-| `decode_pages.mjs chrome`, `stepper.mjs chrome`, `stretch_timing.mjs chrome`, `page_pool.mjs`, `platform_probes.mjs` | Chrome only |
-| `decode_pages.mjs webview`, `stepper.mjs webview`, `stretch_timing.mjs webview`, `compare_decoders.mjs`, `app_memory.mjs` | the debug build of the app (`compare_decoders.mjs` also needs a desktop browser) |
+| `facts.mjs chrome`, `decode_pages.mjs chrome`, `stepper.mjs chrome`, `stretch_timing.mjs chrome`, `page_pool.mjs`, `platform_probes.mjs` | Chrome only |
+| `facts.mjs webview`, `platform_probes.mjs background` with the target `webview`, `decode_pages.mjs webview`, `stepper.mjs webview`, `stretch_timing.mjs webview`, `compare_decoders.mjs`, `app_memory.mjs` | the debug build of the app (`compare_decoders.mjs` also needs a desktop browser) |
 | `report_stepper.mjs`, `report_stretch.mjs` | nothing: they read result files |
 
 ## Scripts
 
 Environment variables: `ADB`, `ANDROID_SERIAL`, `APP_PACKAGE`,
-`ACTIVATION_TAP`, `DESKTOP_CHANNEL` (`compare_decoders.mjs`), `MUSETRIC_ROOT`
-(`build.mjs`), `TAG` and `STEM_S` (`stepper.mjs`).
+`ACTIVATION_TAP`, `CDP_PORT`, `OUT_DIR` (the folder of the results, `out/` by
+default), `DESKTOP_CHANNEL` (`compare_decoders.mjs`), `DESKTOP` and
+`DESKTOP_BROWSER` (`platform_probes.mjs`), `MUSETRIC_ROOT` (`build.mjs`), `TAG`
+and `STEM_S` (`stepper.mjs`).
+
+- `facts.mjs <chrome|webview>`: what the browser has, from the page of
+  [ios](../ios/readme.md), served with and without cross-origin isolation; for
+  the WebView also the isolation of the app's own pages as the app serves them.
+  Output: `out/facts-<label>.json`.
 
 - `decode_pages.mjs <chrome|webview> <task[,task]>`: the page comparator of
   aac_pages on the phone. Tasks: `env controls indexcheck correctness bench
@@ -113,9 +121,17 @@ Environment variables: `ADB`, `ANDROID_SERIAL`, `APP_PACKAGE`,
   the gaps), `bug` (a Chromium issue: suspend and resume after a worklet stall,
   checked by the rate of render quanta), `clock` (`outputLatency`,
   `baseLatency` and `getOutputTimestamp()` before and after suspend and
-  resume) and `stallCheck` (the longest gap and the underruns of one stall).
+  resume), `stallCheck` (the longest gap and the underruns of one stall) and
+  `background` (the page leaves the front for `seconds`, silent or with a quiet
+  tone, then the state of the context, the frames rendered while away against
+  the wall clock, `resume()` with a timeout of 5 s and the rate after it; the
+  JSON `target` of `webview` runs it in the app). With `DESKTOP=1` it runs in a
+  desktop browser started with a fresh profile and driven over raw CDP
+  (`desktop.mjs`), `DESKTOP_BROWSER` being its executable, Microsoft Edge by
+  default; there the page leaves the front as a tab does when another tab
+  comes to the front.
   Sound goes to the phone's output; nothing needs to be paired. Output:
-  `out/platform_probes-<task>.json`.
+  `out/platform_probes-<task>.json` (`background-<target>` for `background`).
 - `app_memory.mjs [--package com.musetric.client.dev] [--tap x,y] [--cycles 3]`:
   reads `dumpsys meminfo` (PSS and RSS) of the app and of the WebView
   processes at the start, then taps a project card, waits, reads, presses Back,

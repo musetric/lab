@@ -220,4 +220,58 @@ T.stallCheck = async (ms) => {
   for (let i = 1; i < d.n; i++) maxGap = Math.max(maxGap, d.cap[3 * i] - d.cap[3 * i - 3]);
   return { maxGapMs: maxGap, ps0, ps1: ctx.playbackStats?.toJSON?.(), ctxTime: ctx.currentTime };
 };
+let tone;
+T.tone = (on) => {
+  tone?.stop();
+  tone = null;
+  if (on) {
+    tone = ctx.createOscillator();
+    const level = ctx.createGain();
+    level.gain.value = 0.02;
+    tone.connect(level);
+    level.connect(ctx.destination);
+    tone.start();
+  }
+};
+const bgLog = [];
+const bgEvent = (type) =>
+  bgLog.push({
+    type,
+    t: +performance.now().toFixed(1),
+    visibility: document.visibilityState,
+    state: ctx?.state,
+    ctxTime: ctx?.currentTime,
+  });
+for (const type of ['visibilitychange', 'freeze', 'resume']) document.addEventListener(type, () => bgEvent(type));
+for (const type of ['pagehide', 'pageshow']) window.addEventListener(type, () => bgEvent(type));
+const within = (promise, ms) =>
+  Promise.race([promise.then((value) => ({ ok: true, value })), sleep(ms).then(() => ({ ok: false }))]);
+T.bgArm = async () => {
+  bgLog.length = 0;
+  ctx.onstatechange = () => bgEvent('statechange');
+  const count = await countNow();
+  bgEvent('arm');
+  return { count, info: T.info() };
+};
+T.bgReturn = async ({ timeoutMs = 5000, rateSec = 3 } = {}) => {
+  bgEvent('return');
+  const stateAtReturn = ctx.state;
+  const count = await within(countNow(), timeoutMs);
+  const t0 = performance.now();
+  const resumed = await within(ctx.resume(), timeoutMs);
+  const resume = { resolved: resumed.ok, ms: +(performance.now() - t0).toFixed(1), state: ctx.state };
+  const info = T.info();
+  const ts = ctx.getOutputTimestamp();
+  const rate = await within(T.rate(rateSec), rateSec * 1e3 + timeoutMs);
+  return {
+    stateAtReturn,
+    countAtReturn: count.ok ? count.value : null,
+    resume,
+    info,
+    outputTimestamp: { contextTime: ts.contextTime, performanceTime: ts.performanceTime },
+    rate: rate.ok ? rate.value : null,
+    infoAfter: T.info(),
+    log: [...bgLog],
+  };
+};
 window.ready = true;

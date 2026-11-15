@@ -1,10 +1,10 @@
 import fs from 'node:fs';
-import * as L from './device.mjs';
+const L = process.env.DESKTOP ? await import('./desktop.mjs') : await import('./device.mjs');
 import { startServer } from './server.mjs';
 const [task, argJson] = process.argv.slice(2);
 const arg = argJson ? JSON.parse(argJson) : {};
-if (!['renderSize', 'callbacks', 'bug', 'clock', 'stallCheck'].includes(task)) {
-  console.error('usage: node platform_probes.mjs <renderSize|callbacks|bug|clock|stallCheck> [json args]');
+if (!['renderSize', 'callbacks', 'bug', 'clock', 'stallCheck', 'background'].includes(task)) {
+  console.error('usage: node platform_probes.mjs <renderSize|callbacks|bug|clock|stallCheck|background> [json args]');
   process.exit(2);
 }
 const save = (name, obj) => {
@@ -13,11 +13,20 @@ const save = (name, obj) => {
 const { server, port } = await startServer({ isolated: true });
 L.mapPort(port);
 const sleep = L.sleep;
-const fresh = async () => {
+const probeUrl = `http://localhost:${port}/web/probe.html`;
+const fresh = async (target = 'chrome') => {
+  if (target === 'webview') {
+    L.sh(`am force-stop ${L.webviewPackage()}`);
+    const opened = await L.openTarget('webview', probeUrl);
+    await opened.page.waitForFunction(() => window.ready);
+    L.assertFront('webview');
+    await L.tapActivation();
+    return { page: opened.page, close: opened.close };
+  }
   L.chromeFresh();
   await sleep(3500);
   const browser = await L.connect();
-  const page = await L.openPage(browser, `http://localhost:${port}/web/probe.html`);
+  const page = await L.openPage(browser, probeUrl);
   await page.waitForFunction(() => window.ready);
   L.front('chrome');
   await sleep(1000);
@@ -25,14 +34,15 @@ const fresh = async () => {
   await L.tapActivation();
   page.setDefaultTimeout(900000);
   page.on('pageerror', (e) => console.log('pageerror', e.message));
-  return { browser, page };
+  const close = async () => {
+    try {
+      await page.close();
+      await browser.close();
+    } catch {}
+  };
+  return { browser, page, close };
 };
-const done = async ({ browser, page }) => {
-  try {
-    await page.close();
-    await browser.close();
-  } catch {}
-};
+const done = (s) => s.close();
 const call = (page, fn, a) => page.evaluate(([f, x]) => window.T[f](x), [fn, a]);
 const meta = () => ({ device: L.versions(), before: L.env() });
 const fit = (xs, ys) => {
@@ -246,6 +256,55 @@ try {
       save('clock', out);
       await done(s);
     }
+  }
+  if (task === 'background') {
+    const target = arg.target ?? 'chrome';
+    const out = { ...meta(), target, runs: [] };
+    const awaySec = arg.seconds ?? 10;
+    for (let rep = 0; rep < (arg.reps ?? 1); rep++)
+      for (const h of arg.hints ?? [0.02, 'interactive'])
+        for (const sound of rep % 2 ? [true, false] : [false, true]) {
+          await L.gate();
+          const s = await fresh(target);
+          const before = L.env();
+          await s.page.evaluate((hh) => window.T.setup(typeof hh === 'object' ? hh : { latencyHint: hh }), h);
+          await s.page.evaluate((on) => window.T.tone(on), sound);
+          const arm = await s.page.evaluate(() => window.T.bgArm());
+          await sleep(2000);
+          await L.toBackground();
+          const away0 = Date.now();
+          await sleep(awaySec * 1000);
+          await L.toFront(target);
+          const awayMs = Date.now() - away0;
+          await sleep(500);
+          const r = await s.page.evaluate((x) => window.T.bgReturn(x), { timeoutMs: 5000 });
+          await s.page.evaluate(() => window.T.tone(false));
+          const c0 = arm.count;
+          const c1 = r.countAtReturn;
+          r.renderedPerWall = c1
+            ? +((c1.frame - c0.frame) / r.info.sampleRate / ((c1.now - c0.now) / 1000)).toFixed(4)
+            : null;
+          Object.assign(r, { hint: h, sound, awaySec, awayMs, rep, arm, before, after: L.env() });
+          out.runs.push(r);
+          console.log(
+            String(h).padEnd(11),
+            sound ? 'tone  ' : 'silent',
+            'state at return',
+            r.stateAtReturn,
+            'rendered/wall while away',
+            r.renderedPerWall,
+            'resume',
+            JSON.stringify(r.resume),
+            'rate after',
+            JSON.stringify(r.rate),
+            'outputLatency',
+            r.info.outputLatency,
+            'events',
+            r.log.map((e) => `${e.type}:${e.state}`).join(','),
+          );
+          save(`background-${target}${arg.tag ?? ''}`, out);
+          await done(s);
+        }
   }
 } finally {
   L.cleanup();
