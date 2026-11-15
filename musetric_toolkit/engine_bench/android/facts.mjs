@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import * as device from './device.mjs';
+const device = process.env.DESKTOP ? await import('./desktop.mjs') : await import('./device.mjs');
 import { here, startServer } from './server.mjs';
 
 const [label] = process.argv.slice(2);
@@ -31,7 +31,7 @@ const plain = await startServer({ roots: [www] });
 const isolated = await startServer({ roots: [www], isolated: true });
 device.mapPort(plain.port);
 device.mapPort(isolated.port);
-const out = { label, device: device.versions() };
+const out = { label };
 let opened;
 try {
   device.wake();
@@ -52,6 +52,7 @@ try {
   out.plain = await readFacts(opened.page);
   await opened.page.goto(`http://localhost:${isolated.port}/index.html`);
   out.isolated = await readFacts(opened.page);
+  out.device = device.versions();
   out.after = device.env();
 } finally {
   await opened?.close();

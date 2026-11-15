@@ -4,7 +4,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { RawPage, cdpPort, sleep } from './device.mjs';
 
-export { outDir, sleep } from './device.mjs';
+export { RawPage, cdpPort, outDir, sleep } from './device.mjs';
 
 const executable = process.env.DESKTOP_BROWSER ?? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
 let browser;
@@ -85,6 +85,18 @@ export const toFront = async () => {
   await json(`activate/${current.targetId}`);
   if (other) await json(`close/${other.id}`);
   other = null;
+};
+
+export const connectWebview = () => RawPage.open(cdpPort);
+
+export const openTarget = async (target, url) => {
+  if (target === 'webview') {
+    const page = await connectWebview();
+    await page.goto(url);
+    return { page, close: () => page.ws.close() };
+  }
+  const page = await openPage(await connect(), url);
+  return { page, close };
 };
 
 export const versions = () => ({
