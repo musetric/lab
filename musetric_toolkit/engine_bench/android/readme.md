@@ -140,6 +140,12 @@ and `STEM_S` (`stepper.mjs`).
   on; it defaults to the screen center, which is only right by chance. The app
   must already hold a project; the script creates and deletes nothing. Output:
   `out/app_memory.json` and `out/app_memory-open<N>.png`.
+- `desktop_app_memory.mjs --pid <pid> [--project /project/1] [--cycles 3]`:
+  the same cycles in a desktop app whose WebView2 listens for CDP on
+  `CDP_PORT` (start the app with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`
+  holding its own browser arguments and `--remote-debugging-port`): it opens
+  the project through its link and goes back, and reads the working set of
+  every process of the app on Windows. Output: `out/desktop_app_memory.json`.
 - `device.mjs` and `server.mjs` are the shared pieces: adb, the thermal gate,
   the CDP connections and the static server (Range requests, cross-origin
   isolation headers where a script asks for them).

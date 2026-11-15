@@ -21,7 +21,7 @@ export const tapActivation = async () => {};
 export const chromeFresh = () => {};
 
 const close = async () => {
-  if (!browser) return;
+  if (!browser?.child) return;
   const { child, profile } = browser;
   browser = null;
   child.kill();
@@ -87,7 +87,10 @@ export const toFront = async () => {
   other = null;
 };
 
-export const connectWebview = () => RawPage.open(cdpPort);
+export const connectWebview = async () => {
+  browser ??= { version: await (await fetch(`http://127.0.0.1:${cdpPort}/json/version`)).json() };
+  return RawPage.open(cdpPort);
+};
 
 export const openTarget = async (target, url) => {
   if (target === 'webview') {
