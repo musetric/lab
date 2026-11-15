@@ -3,14 +3,14 @@ import { chromium, webkit } from 'playwright';
 import { startServer } from './server.mjs';
 
 const [engine, taskArg] = process.argv.slice(2); const tasks = taskArg.split(',');
-const root = import.meta.dirname; const outDir = path.join(root, 'out'); fs.mkdirSync(outDir, { recursive: true });
+const root = import.meta.dirname; const outDir = path.resolve(process.env.OUT_DIR ?? path.join(root, 'out')); fs.mkdirSync(outDir, { recursive: true });
 const inputs = JSON.parse(fs.readFileSync(path.join(root, 'data/inputs.json'), 'utf8'));
 const save = (task, obj) => { const f = path.join(outDir, `${engine}-${task}.json`); fs.writeFileSync(f, JSON.stringify(obj, null, 1)); console.log('saved', f); };
 
 const { server, port } = await startServer(); const base = `http://127.0.0.1:${port}`;
 const launch = async () => {
   const opts = { headless: true, args: engine === 'webkit' ? [] : ['--force_high_performance_gpu', '--enable-precise-memory-info', '--js-flags=--expose-gc'] };
-  if (engine === 'msedge') opts.channel = 'msedge';
+  if (engine === 'msedge' || engine === 'chrome') opts.channel = engine;
   const type = engine === 'webkit' ? webkit : chromium;
   const dir = fs.mkdtempSync(path.join(os.tmpdir(),`aacp-${engine}-`));
   const ctx = await type.launchPersistentContext(dir, opts); const page = await ctx.newPage(); await page.goto(`${base}/web/index.html`); await page.waitForFunction(() => window.ready);

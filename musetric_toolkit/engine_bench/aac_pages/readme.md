@@ -15,8 +15,9 @@ node run.mjs msedge env,controls,indexcheck,correctness,bench,parallel,mem,flac
 
 - `npm run inputs` generates the WAVs, then encodes fMP4 and FLAC with the host
   encoder and appends an `mfra` to a copy of `mix240.mp4`.
-- Engines: `msedge`, `chromium`, `webkit` (`npx playwright install` fetches the
-  last two). The task `mem` needs Windows.
+- Engines: `msedge`, `chrome`, `chromium`, `webkit` (`npx playwright install`
+  fetches the last two). The task `mem` needs Windows. `OUT_DIR` sets the
+  folder of the results.
 - Inputs (`gen.mjs`, deterministic): chord, noise, clicks and sweep of 90 s and
   `mix240` of 240 s, stereo 48 kHz 24-bit. `npm run check:index` checks the
   packet index and the comparator controls without a browser.
