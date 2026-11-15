@@ -7,3 +7,5 @@ certs/
 target/
 reports.jsonl
 dist/
+build/
+*.xcodeproj/

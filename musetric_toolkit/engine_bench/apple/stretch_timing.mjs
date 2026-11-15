@@ -1,0 +1,58 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import * as D from './device.mjs';
+import { session, stands } from './session.mjs';
+
+const [target, block] = process.argv.slice(2);
+if (!block) {
+  console.error('usage: node stretch_timing.mjs <target> <main|tempo125|paced|webview|quick>');
+  process.exit(2);
+}
+const all = ['V0-1', 'V0-3', 'V0-3stag', 'V1-1', 'V1-3', 'V1-3stag', 'V2-1', 'V2-3', 'V3-1', 'V3-3'];
+const jobs = [];
+const add = (variants, options) => {
+  for (let rep = 0; rep < (options.reps ?? 2); rep++) {
+    for (const v of rep % 2 ? [...variants].reverse() : variants) {
+      jobs.push({ v, tempo: 0.75, tr: 3, range: false, paced: false, nq: 22500, ...options, rep });
+    }
+  }
+};
+if (block === 'main') {
+  add(all, { range: false });
+  add(all, { range: true });
+}
+if (block === 'tempo125') add(['V0-3', 'V0-3stag', 'V1-3', 'V1-3stag'], { tempo: 1.25 });
+if (block === 'paced') add(['V0-3', 'V0-3stag', 'V1-3', 'V1-3stag', 'V2-3', 'V1-1'], { paced: true, nq: 9000 });
+if (block === 'webview') add(['V0-3', 'V0-3stag', 'V1-3', 'V1-3stag', 'V3-3'], { range: false });
+if (block === 'quick') add(['V0-3', 'V1-3stag'], { nq: 4000, reps: 1 });
+
+await session(
+  target,
+  async ({ open, meta, env, gate }) => {
+    console.log('pre', JSON.stringify(await gate()));
+    const page = await open('/web/timing.html');
+    await page.waitForFunction(() => Boolean(window.ready));
+    await D.sleep(1500);
+    const init = await page.evaluate(() => window.send({ cmd: 'init' }));
+    console.log('init', JSON.stringify(init));
+    const base = meta();
+    const results = [];
+    for (const j of jobs) {
+      const before = await gate();
+      const r = await page.evaluate((m) => window.send({ cmd: 'run', ...m }), {
+        v: j.v, tempo: j.tempo, tr: j.tr, range: j.range, paced: j.paced, nq: j.nq,
+      });
+      const after = env();
+      results.push({ ...r, rep: j.rep, before, after });
+      const us = (v) => v.toFixed(0);
+      console.log(`${j.v.padEnd(9)} t${j.tempo} R${+j.range} P${+j.paced} rep${j.rep}`, `med ${us(r.med)} p99 ${us(r.p99)} p99.9 ${us(r.p999)} max ${us(r.max)}`,
+        `>50% ${r.over50} >100% ${r.over100} wall ${(r.wallMs / 1000).toFixed(1)}s | ${JSON.stringify(after)}`);
+      fs.writeFileSync(D.outDir(`stretch_timing-${target}-${block}.json`), JSON.stringify({ ...base, block, init, results }, null, 1));
+    }
+  },
+  {
+    roots: [path.join(stands, 'android')],
+    routes: { '/stretch_modes/common.mjs': path.join(stands, 'stretch_modes/common.mjs') },
+    isolated: true,
+  },
+);

@@ -14,14 +14,22 @@ const types = {
   '.flac': 'audio/flac',
 };
 
-export const startServer = ({ roots = [here], routes = {}, isolated = false } = {}) =>
+export const startServer = ({ roots = [here], routes = {}, isolated = false, handle, inject } = {}) =>
   new Promise((resolve) => {
-    const stats = { requests: 0, ranged: 0, bytes: 0 };
+    const stats = { requests: 0, ranged: 0, bytes: 0, sent: 0 };
     const server = http.createServer((req, res) => {
       const url = new URL(req.url, 'http://127.0.0.1');
+      if (handle?.(req, res, url)) {
+        return;
+      }
       if (url.pathname === '/__stats') {
         res.setHeader('content-type', 'application/json');
+        res.setHeader('cache-control', 'no-store');
         return res.end(JSON.stringify(stats));
+      }
+      if (url.pathname === '/__reset') {
+        stats.requests = stats.ranged = stats.bytes = stats.sent = 0;
+        return res.end('ok');
       }
       const pathname = decodeURIComponent(url.pathname);
       const file =
@@ -46,6 +54,13 @@ export const startServer = ({ roots = [here], routes = {}, isolated = false } = 
       };
       stats.requests++;
       const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range ?? '');
+      if (inject && !range && path.extname(file) === '.html') {
+        const body = inject(fs.readFileSync(file, 'utf8'));
+        stats.bytes += Buffer.byteLength(body);
+        stats.sent += Buffer.byteLength(body);
+        res.writeHead(200, { ...headers, 'content-length': Buffer.byteLength(body) });
+        return res.end(body);
+      }
       if (range) {
         const start = Number(range[1]);
         const end = range[2] === '' ? size - 1 : Math.min(size - 1, Number(range[2]));
@@ -56,11 +71,19 @@ export const startServer = ({ roots = [here], routes = {}, isolated = false } = 
           'content-range': `bytes ${start}-${end}/${size}`,
           'content-length': end - start + 1,
         });
-        fs.createReadStream(file, { start, end }).pipe(res);
+        const stream = fs.createReadStream(file, { start, end });
+        stream.on('data', (chunk) => {
+          stats.sent += chunk.length;
+        });
+        stream.pipe(res);
       } else {
         stats.bytes += size;
         res.writeHead(200, { ...headers, 'content-length': size });
-        fs.createReadStream(file).pipe(res);
+        const stream = fs.createReadStream(file);
+        stream.on('data', (chunk) => {
+          stats.sent += chunk.length;
+        });
+        stream.pipe(res);
       }
     });
     server.listen(0, '127.0.0.1', () => resolve({ server, port: server.address().port }));

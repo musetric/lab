@@ -32,7 +32,8 @@ class PageProcessor extends AudioWorkletProcessor {
 
   resetStats() {
     this.st = { quanta: 0, bufQuanta: 0, bufEvents: 0, pages: 0, stale: 0, dup: 0, evicts: 0, refused: 0, rets: 0, anchors: 0, procMs: 0, procHeavy: 0, hMs: 0, hCount: 0, hHeavy: 0,
-      errors: 0, heapMoved: 0, benchMsgs: 0, msgBytes: 0, firstQ: 0 };
+      errors: 0, heapMoved: 0, benchMsgs: 0, msgBytes: 0, firstQ: 0, gap6: 0, gap11: 0, gap21: 0, gap41: 0, gapMax: 0 };
+    this.lastCall = 0;
   }
 
   onMain(m) {
@@ -52,7 +53,7 @@ class PageProcessor extends AudioWorkletProcessor {
       case 'stretchers': this.nStretch = m.count; this.stagger = m.stagger; if (!!m.split !== this.split) this.configureStretchers(!!m.split); this.invalidateStretchers(); this.ack(m.seq); break;
       case 'capture': this.armCapture(m); break;
       case 'dump': this.dump(); break;
-      case 'stats': this.port.postMessage({ t: 'stats', st: this.st, resident: this.residentCount(), q: this.q, cur: this.cur, motion: this.motion, gen: this.gen, nStretch: this.nStretch }); break;
+      case 'stats': this.port.postMessage({ t: 'stats', st: this.st, resident: this.residentCount(), q: this.q, cur: this.cur, motion: this.motion, gen: this.gen, nStretch: this.nStretch }); this.st.gapMax = 0; break;
       case 'resetStats': this.resetStats(); break;
       case 'bug': this.bug = m.name; break;
       case 'ping': this.port.postMessage({ t: 'pong', seq: m.seq, frame: currentFrame, hasPerformance: typeof performance !== 'undefined', hasDate: typeof Date !== 'undefined' }); break;
@@ -254,6 +255,15 @@ class PageProcessor extends AudioWorkletProcessor {
 
   process(inputs, outputs) {
     const t0 = Date.now();
+    if (this.lastCall) {
+      const gap = t0 - this.lastCall;
+      if (gap >= 6) this.st.gap6++;
+      if (gap >= 11) this.st.gap11++;
+      if (gap >= 21) this.st.gap21++;
+      if (gap >= 41) this.st.gap41++;
+      if (gap > this.st.gapMax) this.st.gapMax = gap;
+    }
+    this.lastCall = t0;
     const out = outputs[0];
     const L = out[0], R = out[1] ?? out[0];
     try {

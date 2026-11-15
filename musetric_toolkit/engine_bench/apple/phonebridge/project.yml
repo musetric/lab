@@ -1,0 +1,20 @@
+name: PhoneBridge
+options:
+  bundleIdPrefix: com.musetric.bench
+targets:
+  PhoneBridgeUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "26.0"
+    sources: [Tests]
+    settings:
+      DEVELOPMENT_TEAM: ${DEVELOPMENT_TEAM}
+      CODE_SIGN_STYLE: Automatic
+      GENERATE_INFOPLIST_FILE: YES
+schemes:
+  PhoneBridgeUITests:
+    build:
+      targets:
+        PhoneBridgeUITests: [test]
+    test:
+      targets: [PhoneBridgeUITests]

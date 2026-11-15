@@ -225,7 +225,7 @@ T.underrun = async ({ name, kind = 'pages', tempo = 1, stretchers = 1, loop = fa
   await T.teardown();
   const n0 = s0.node.st, n1 = s1.node.st; const d = {}; for (const k of Object.keys(n1)) d[k] = +(n1[k] - n0[k]).toFixed(3);
   return { name, kind, tempo, stretchers, loop, seekEveryMs, seekMode, jank, stress, stagger, split, latencyHint, nSeeks, wallMs: performance.now() - t0, ctxSeconds: ctxDur, outputLatency: null, playbackStatsStart: ps0, playbackStatsEnd: s1.playbackStats, playbackStatsDelta: diff(ps0, s1.playbackStats),
-    spike: d, quantaExpected: Math.round(ctxDur * SR / Q), worker: summarizeWorker(s1.worker), setupStretch: su.wasm, heapMoved: n1.heapMoved };
+    spike: d, gapMaxMs: n1.gapMax, quantaExpected: Math.round(ctxDur * SR / Q), worker: summarizeWorker(s1.worker), setupStretch: su.wasm, heapMoved: n1.heapMoved };
 };
 
 T.messageCost = async ({ playMs = 20000 } = {}) => {
