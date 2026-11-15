@@ -15,6 +15,17 @@ L.mapPort(port);
 const sleep = L.sleep;
 const probeUrl = `http://localhost:${port}/web/probe.html`;
 const fresh = async (target = 'chrome') => {
+  if (target === 'chrome-raw') {
+    L.chromeFresh();
+    await sleep(3500);
+    const opened = await L.openChromeRaw(probeUrl);
+    await opened.page.waitForFunction(() => window.ready);
+    L.front('chrome');
+    await sleep(1000);
+    L.assertFront('chrome');
+    await L.tapActivation();
+    return opened;
+  }
   if (target === 'webview') {
     L.sh(`am force-stop ${L.webviewPackage()}`);
     const opened = await L.openTarget('webview', probeUrl);
@@ -265,7 +276,7 @@ try {
       for (const h of arg.hints ?? [0.02, 'interactive'])
         for (const sound of rep % 2 ? [true, false] : [false, true]) {
           await L.gate();
-          const s = await fresh(target);
+          const s = await fresh(target === 'chrome' && !process.env.DESKTOP ? 'chrome-raw' : target);
           const before = L.env();
           await s.page.evaluate((hh) => window.T.setup(typeof hh === 'object' ? hh : { latencyHint: hh }), h);
           await s.page.evaluate((on) => window.T.tone(on), sound);

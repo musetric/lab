@@ -127,6 +127,34 @@ export const connect = async () => {
   return chromium.connectOverCDP(`http://127.0.0.1:${cdpPort}`);
 };
 
+export const openChromeRaw = async (url) => {
+  if (!chromeSocketUp()) {
+    sh(`am start -a android.intent.action.VIEW -d about:blank ${chromePackage}`);
+    for (let i = 0; i < 50 && !chromeSocketUp(); i++) {
+      await sleep(200);
+    }
+  }
+  forwardCdp('localabstract:chrome_devtools_remote');
+  const browserTarget = await (await fetch(`http://127.0.0.1:${cdpPort}/json/version`)).json();
+  const ws = new WebSocket(browserTarget.webSocketDebuggerUrl);
+  await new Promise((resolve, reject) => {
+    ws.onopen = resolve;
+    ws.onerror = reject;
+  });
+  const session = new RawPage(ws);
+  const { targetId } = await session.send('Target.createTarget', { url });
+  const page = await RawPage.open(cdpPort, (targets) => targets.find((t) => t.id === targetId));
+  await page.waitForFunction(() => document.readyState === 'complete');
+  return {
+    page,
+    close: async () => {
+      await page.close();
+      await session.send('Target.closeTarget', { targetId }).catch(() => {});
+      ws.close();
+    },
+  };
+};
+
 export const openPage = async (browser, url) => {
   const page = await browser.contexts()[0].newPage();
   await page.goto(url);
