@@ -116,24 +116,26 @@ const webviewSocket = (pkg) => {
 
 const chromeSocketUp = () => sh('cat /proc/net/unix').includes('chrome_devtools_remote');
 
-export const connect = async () => {
-  if (!chromeSocketUp()) {
-    sh(`am start -a android.intent.action.VIEW -d about:blank ${chromePackage}`);
-    for (let i = 0; i < 50 && !chromeSocketUp(); i++) {
-      await sleep(200);
-    }
+const wakeChrome = async () => {
+  if (chromeSocketUp()) {
+    sh(`am start -n ${chromePackage}/org.chromium.chrome.browser.ChromeTabbedActivity`);
+    await sleep(1000);
+    return;
   }
+  sh(`am start -a android.intent.action.VIEW -d about:blank ${chromePackage}`);
+  for (let i = 0; i < 50 && !chromeSocketUp(); i++) {
+    await sleep(200);
+  }
+};
+
+export const connect = async () => {
+  await wakeChrome();
   forwardCdp('localabstract:chrome_devtools_remote');
   return chromium.connectOverCDP(`http://127.0.0.1:${cdpPort}`);
 };
 
 export const openChromeRaw = async (url) => {
-  if (!chromeSocketUp()) {
-    sh(`am start -a android.intent.action.VIEW -d about:blank ${chromePackage}`);
-    for (let i = 0; i < 50 && !chromeSocketUp(); i++) {
-      await sleep(200);
-    }
-  }
+  await wakeChrome();
   forwardCdp('localabstract:chrome_devtools_remote');
   const browserTarget = await (await fetch(`http://127.0.0.1:${cdpPort}/json/version`)).json();
   const ws = new WebSocket(browserTarget.webSocketDebuggerUrl);
