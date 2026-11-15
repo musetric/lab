@@ -6,7 +6,7 @@ import { chromium } from 'playwright';
 export { chromium };
 
 export const ADB = process.env.ADB ?? 'adb';
-export const cdpPort = 9333;
+export const cdpPort = +(process.env.CDP_PORT ?? 9333);
 export const chromePackage = 'com.android.chrome';
 const webviewProviderPackage = 'com.google.android.webview';
 
@@ -67,17 +67,27 @@ export const tapActivation = async () => {
   await sleep(300);
 };
 
+const mapped = { reverse: new Set(), forward: new Set() };
+
 export const mapPort = (port) => {
   adb('reverse', `tcp:${port}`, `tcp:${port}`);
+  mapped.reverse.add(`tcp:${port}`);
+};
+
+const forwardCdp = (socket) => {
+  adb('forward', `tcp:${cdpPort}`, socket);
+  mapped.forward.add(`tcp:${cdpPort}`);
 };
 
 export const cleanup = () => {
-  try {
-    adb('reverse', '--remove-all');
-  } catch {}
-  try {
-    adb('forward', '--remove-all');
-  } catch {}
+  for (const [kind, specs] of Object.entries(mapped)) {
+    for (const spec of specs) {
+      try {
+        adb(kind, '--remove', spec);
+      } catch {}
+    }
+    specs.clear();
+  }
 };
 
 export const versions = () => {
@@ -113,7 +123,7 @@ export const connect = async () => {
       await sleep(200);
     }
   }
-  adb('forward', `tcp:${cdpPort}`, 'localabstract:chrome_devtools_remote');
+  forwardCdp('localabstract:chrome_devtools_remote');
   return chromium.connectOverCDP(`http://127.0.0.1:${cdpPort}`);
 };
 
@@ -148,9 +158,9 @@ export class RawPage {
     };
   }
 
-  static async open(port) {
+  static async open(port, pick = (targets) => targets.find((x) => x.type === 'page')) {
     const targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json();
-    const target = targets.find((x) => x.type === 'page');
+    const target = pick(targets);
     const ws = new WebSocket(target.webSocketDebuggerUrl);
     await new Promise((resolve, reject) => {
       ws.onopen = resolve;
@@ -210,7 +220,7 @@ export class RawPage {
 }
 
 export const connectWebview = async () => {
-  adb('forward', `tcp:${cdpPort}`, `localabstract:${webviewSocket(webviewPackage())}`);
+  forwardCdp(`localabstract:${webviewSocket(webviewPackage())}`);
   return RawPage.open(cdpPort);
 };
 
@@ -221,6 +231,9 @@ export const front = (target) => {
     sh(`am start -n ${chromePackage}/org.chromium.chrome.browser.ChromeTabbedActivity`);
   }
 };
+
+export const toBackground = () => sh('input keyevent KEYCODE_HOME');
+export const toFront = (target) => front(target);
 
 export const assertFront = (target) => {
   const focus = env().focus ?? '';
@@ -254,7 +267,7 @@ export const openTarget = async (target, url) => {
 };
 
 export const outDir = (name) => {
-  const dir = path.join(import.meta.dirname, 'out');
+  const dir = path.resolve(process.env.OUT_DIR ?? path.join(import.meta.dirname, 'out'));
   fs.mkdirSync(dir, { recursive: true });
   return path.join(dir, name);
 };
